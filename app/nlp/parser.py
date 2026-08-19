@@ -29,7 +29,8 @@ from app.models import (
     Intent,
     ParsedCommand,
 )
-from app.nlp.lexicons import Lexicon, get_lexicon
+from app.nlp.detect import detect_script_language
+from app.nlp.lexicons import LEXICONS, Lexicon, get_lexicon
 from app.nlp.lexicons.base import (
     WORD_END,
     WORD_START,
@@ -284,13 +285,75 @@ def _needs_clarification(command: ParsedCommand) -> bool:
     return command.confidence < LOW_CONFIDENCE
 
 
+def _candidate_locales(transcript: str, requested: str) -> list[str]:
+    """Other locales worth trying, best guess first.
+
+    The script is the strongest signal available, so a Tamil sentence promotes
+    the Tamil pack to the front regardless of what the picker says. Everything
+    else follows in registration order, which is what catches romanized input
+    that no script test can identify.
+    """
+    requested_code = get_lexicon(requested).code
+    ordered: list[str] = []
+
+    by_script = detect_script_language(transcript)
+    if by_script and by_script != requested_code:
+        ordered.append(get_lexicon(by_script).default_locale)
+
+    for lexicon in LEXICONS:
+        if lexicon.code == requested_code:
+            continue
+        if lexicon.default_locale not in ordered:
+            ordered.append(lexicon.default_locale)
+    return ordered
+
+
 def parse(transcript: str, language: str = "en-US") -> ParsedCommand:
     """Turn one utterance into a structured command.
 
-    Never raises: an unparseable utterance comes back as ``Intent.UNKNOWN``
-    with confidence 0, which the UI renders as "I didn't catch that".
+    The requested language is tried first. If it yields nothing, the other
+    language packs are tried too: the picker sets the speech-recognition
+    locale, which is a different question from what the user actually said.
+    Answering "I didn't understand" to a clear Tamil sentence because the
+    picker was left on English is the worst possible response.
+
+    Never raises: a genuinely unparseable utterance comes back as
+    ``Intent.UNKNOWN`` with confidence 0.
     """
     command = _parse(transcript, language)
+
+    # Reparse in other languages when the selected one produced nothing, or
+    # produced only a weak guess. The bare-name fallback is the reason for the
+    # second condition: "anju apple ser" is romanized Tamil, but English will
+    # happily claim it as an item literally called that, because the phrase
+    # contains a word the categorizer recognises.
+    weak = (
+        command.intent is Intent.UNKNOWN
+        or command.confidence <= _BARE_ITEM_CONFIDENCE
+    )
+    if weak and transcript.strip():
+        best: ParsedCommand | None = None
+        for locale in _candidate_locales(transcript, language):
+            attempt = _parse(transcript, locale)
+            if attempt.intent is Intent.UNKNOWN:
+                continue
+            # _parse already scored this. Recomputing here would overwrite the
+            # deliberately low score the bare-name fallback assigns, and every
+            # language would then look equally confident about "milk".
+            # Another language has to be *more* confident to take over, so a
+            # plain English "milk" is never relabelled as Tamil just because
+            # every pack reads it the same way.
+            if attempt.confidence <= command.confidence:
+                continue
+            if best is None or attempt.confidence > best.confidence:
+                best = attempt
+            # A confident hit needs no second opinion.
+            if attempt.confidence >= 0.8:
+                break
+        if best is not None:
+            best.detected_language = best.language
+            command = best
+
     # Applied here, at the single exit, rather than at each of the several
     # returns inside _parse - one place to get right instead of four.
     command.needs_clarification = _needs_clarification(command)

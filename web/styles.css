@@ -239,6 +239,15 @@ main {
   vertical-align: .12em;
 }
 
+/* Detected-language tag, distinguished from the AI tag by colour so the two
+   are not mistaken for each other at a glance. */
+.lang-tag {
+  color: var(--ink-soft);
+  border-color: var(--ink-faint);
+  text-transform: none;
+  letter-spacing: .04em;
+}
+
 /* ---------- confirmation ---------- */
 
 .confirm-box {

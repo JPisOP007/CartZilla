@@ -14,6 +14,17 @@ Tamil shares Hindi's two structural challenges and adds a third:
 Tamil vowel signs and the pulli are combining marks (Unicode Mc/Mn), which is
 exactly what the category-based normalizer preserves and a ``\\w`` class would
 have destroyed.
+
+**Romanized Tamil is supported alongside the script.** A great many Tamil
+speakers type "ennaku oru muttai vendum" rather than switching keyboards, and
+an app that only accepts Tamil script rejects most of what they actually write.
+Romanized forms live in the same dictionaries as their Tamil-script
+equivalents, so the parser needs no special case. Transliteration is not
+standardised, so the common spelling variants are simply listed.
+
+Because romanized Tamil is Latin script, no script test can identify it:
+:func:`app.nlp.parser.parse` finds it by trying this pack when the selected
+language yields nothing.
 """
 
 from __future__ import annotations
@@ -35,6 +46,19 @@ _NUMBER_WORDS: dict[str, float] = {
     "அரை": 0.5, "கால்": 0.25, "முக்கால்": 0.75,
     "ஒன்றரை": 1.5, "இரண்டரை": 2.5,
     "டஜன்": 12,
+    # Romanized. Several spellings per numeral, because transliteration is not
+    # standardised and speech-to-text output varies.
+    "onnu": 1, "ondru": 1, "oru": 1,
+    "rendu": 2, "irandu": 2, "irendu": 2,
+    "moonu": 3, "moondru": 3, "muunu": 3,
+    "naalu": 4, "nangu": 4, "naangu": 4,
+    "anju": 5, "ainthu": 5, "ainju": 5,
+    "aaru": 6, "ezhu": 7, "elu": 7, "ettu": 8,
+    "onbathu": 9, "onbadhu": 9,
+    "pathu": 10, "paththu": 10, "pannirendu": 12,
+    "irubathu": 20, "muppathu": 30,
+    "arai": 0.5, "kaal": 0.25,
+    "dozen": 12,
 }
 
 _UNITS: dict[str, str] = {
@@ -51,6 +75,17 @@ _UNITS: dict[str, str] = {
     "டஜன்": "dozen",
     "துண்டு": "piece", "துண்டுகள்": "piece",
     "கட்டு": "bunch", "கொத்து": "bunch",
+    # Romanized, plus the English unit words Tamil speakers routinely mix in.
+    "litre": "litre", "litres": "litre", "liter": "litre", "liters": "litre",
+    "kilo": "kg", "kilos": "kg", "kg": "kg",
+    "gram": "g", "grams": "g", "ml": "ml",
+    "bottle": "bottle", "bottles": "bottle",
+    "packet": "packet", "packets": "packet", "pack": "pack",
+    "dabba": "box", "box": "box", "petti": "box",
+    "can": "can", "tin": "tin",
+    "pai": "bag", "bag": "bag", "kavar": "bag",
+    "thundu": "piece", "piece": "piece",
+    "kattu": "bunch", "koththu": "bunch",
 }
 
 _ATTRIBUTES: dict[str, str] = {
@@ -61,6 +96,11 @@ _ATTRIBUTES: dict[str, str] = {
     "வெள்ளை": "white", "பழுப்பு": "brown", "கருப்பு": "dark",
     "சிவப்பு": "red",
     "பச்சை": "green",
+    # Romanized
+    "organic": "organic", "iyarkai": "organic",
+    "puthiya": "fresh", "fresh": "fresh",
+    "frozen": "frozen", "muzhu": "whole", "whole": "whole",
+    "vellai": "white", "pazhuppu": "brown",
 }
 
 _ITEM_ALIASES: dict[str, str] = {
@@ -95,6 +135,45 @@ _ITEM_ALIASES: dict[str, str] = {
     "டிடர்ஜென்ட்": "detergent",
     "டாய்லெட் பேப்பர்": "toilet paper", "டிஷ்யூ": "tissue",
     "டயப்பர்": "diapers",
+    # Romanized. These are the words that actually get typed.
+    "paal": "milk", "pal": "milk", "paalu": "milk",
+    "badam paal": "almond milk", "almond paal": "almond milk",
+    "thayir": "yogurt", "thair": "yogurt", "mor": "buttermilk",
+    "vennai": "butter", "nei": "butter", "ghee": "butter",
+    "cheese": "cheese", "paneer": "cheese",
+    "muttai": "eggs", "mutai": "eggs", "muttaigal": "eggs",
+    "rotti": "bread", "roti": "bread", "bread": "bread",
+    "arisi": "rice", "rice": "rice",
+    "maavu": "flour", "kothumai": "wheat", "godhumai": "wheat",
+    "sakkarai": "sugar", "sarkarai": "sugar", "sugar": "sugar",
+    "uppu": "salt", "milagu": "pepper",
+    "ennai": "oil", "oil": "oil",
+    "kaapi": "coffee", "kapi": "coffee", "coffee": "coffee",
+    "theneer": "tea", "tea": "tea",
+    "thanni": "water", "thanneer": "water", "tanni": "water",
+    "water": "water", "juice": "juice",
+    "apple": "apple", "aappil": "apple",
+    "vazhaipazham": "banana", "vazhai": "banana", "banana": "banana",
+    "orange": "orange",
+    "elumichai": "lemon", "elumichampazham": "lemon",
+    "maampazham": "mango", "maanga": "mango", "mango": "mango",
+    "thiratchai": "grapes", "grapes": "grapes",
+    "pazham": "fruit", "pazhangal": "fruit",
+    "thakkali": "tomatoes", "takkali": "tomatoes", "tomato": "tomatoes",
+    "urulaikizhangu": "potatoes", "urulai": "potatoes", "potato": "potatoes",
+    "vengayam": "onions", "onion": "onions",
+    "poondu": "garlic", "garlic": "garlic", "inji": "ginger",
+    "carrot": "carrots", "keerai": "spinach", "vellarikkai": "cucumber",
+    "kaai": "vegetable", "kaaikari": "vegetable",
+    "pattani": "peas", "paruppu": "lentils", "kadalai": "chickpeas",
+    "kozhi": "chicken", "chicken": "chicken", "mutton": "lamb",
+    "meen": "fish", "fish": "fish", "iraal": "shrimp",
+    "pasta": "pasta", "oats": "oats", "then": "honey",
+    "chocolate": "chocolate", "biscuit": "crackers", "chips": "chips",
+    "parpasai": "toothpaste", "pal podi": "toothpaste",
+    "pal paste": "toothpaste", "toothpaste": "toothpaste",
+    "shampoo": "shampoo", "soap": "soap", "soappu": "soap",
+    "savukaram": "soap", "detergent": "detergent",
 }
 
 _STOPWORDS: frozenset[str] = frozenset({
@@ -106,6 +185,14 @@ _STOPWORDS: frozenset[str] = frozenset({
     "தயவுசெய்து", "ப்ளீஸ்", "கொஞ்சம்", "சிறிது",
     "செய்", "செய்யவும்", "பண்ணு", "பண்ணவும்", "வும்",
     "மற்றும்", "உள்ளது", "இருக்கு",
+    # Romanized
+    "ennaku", "enakku", "enaku", "engaluku", "engalukku",
+    "naan", "naanga", "en", "enga", "namma",
+    "indha", "andha", "idhu", "adhu", "ithu", "athu",
+    "la", "le", "il", "irundhu", "irunthu", "kku", "ku",
+    "pattiyal", "pattiyalil", "list", "listla", "listil",
+    "please", "konjam", "kudunga",
+    "pannu", "pannunga", "sollunga",
 })
 
 TAMIL = Lexicon(
@@ -122,6 +209,14 @@ TAMIL = Lexicon(
         r"வேண்டும்", r"வேணும்", r"தேவை",
         r"ஆட்\s*(?:பண்ணு|செய்)",
         r"இணை\s*(?:க்க|வும்)?",
+        # Romanized. "vendum"/"venum" (want) is the workhorse; it must not
+        # collide with "vendaam"/"venaam" (don't want), which is a removal.
+        r"vendum", r"venum", r"vanum", r"vendhum",
+        r"serkka(?:vum)?", r"sernthu", r"ser", r"sera",
+        r"podu", r"poda", r"podunga", r"pottu",
+        r"vaangu", r"vaanga", r"vaangunga", r"vangu",
+        r"thevai",
+        r"add\s*(?:pannu|pannunga)?",
     ),
     remove_cues=(
         r"நீக்க\s*(?:வும்|ு)?", r"நீக்கு",
@@ -129,10 +224,19 @@ TAMIL = Lexicon(
         r"அகற்ற\s*(?:வும்|ு)?", r"அகற்று",
         r"வேண்டாம்", r"வேணாம்",
         r"ரிமூவ்\s*(?:பண்ணு)?", r"டெலீட்\s*(?:பண்ணு)?",
+        # Romanized
+        r"vendaam", r"venaam", r"vendam", r"vena",
+        r"neeku(?:nga)?", r"neekku(?:nga)?", r"neeki",
+        r"eduthu(?:\s*vidu)?", r"edu(?:nga)?",
+        r"remove\s*(?:pannu|pannunga)?",
+        r"delete\s*(?:pannu|pannunga)?",
     ),
     update_cues=(
         r"மாற்ற\s*(?:வும்|ு)?", r"மாற்று", r"மாற்றி", r"மாத்து",
         r"அப்டேட்\s*(?:பண்ணு)?",
+        # Romanized
+        r"maathu(?:nga)?", r"maatru", r"maathi", r"mathu",
+        r"change\s*(?:pannu|pannunga)?",
     ),
     complete_cues=(
         r"வாங்கி\s*விட்டேன்", r"வாங்கிட்டேன்",
@@ -145,6 +249,11 @@ TAMIL = Lexicon(
         r"சர்ச்\s*(?:பண்ணு)?",
         r"விலை\s+என்ன",
         r"எவ்வளவு\s+விலை",
+        # Romanized
+        r"thedu(?:nga)?", r"thedi(?:\s*paaru)?", r"theda",
+        r"kandupidi(?:nga|kka)?",
+        r"search\s*(?:pannu|pannunga)?",
+        r"vilai\s+enna", r"evvalavu\s+vilai",
     ),
     show_cues=(
         r"(?:பட்டியல்|பட்டியலை|லிஸ்ட்)\s+காட்ட\s*(?:வும்|ு)?",
@@ -152,6 +261,11 @@ TAMIL = Lexicon(
         r"காட்டு\s+(?:என்\s+)?(?:பட்டியல்|லிஸ்ட்)",
         r"என்ன\s+வாங்க\s+வேண்டும்",
         r"^என்\s+(?:பட்டியல்|லிஸ்ட்)$",
+        # Romanized
+        r"(?:list|pattiyal)\s+(?:kaattu|kaatu|kaaminga|kaattunga)",
+        r"(?:kaattu|kaatu|kaattunga)\s+(?:en\s+)?(?:list|pattiyal)",
+        r"enna\s+vaanga\s+vendum",
+        r"^en\s+(?:list|pattiyal)$",
     ),
     clear_cues=(
         r"(?:பட்டியல்|பட்டியலை|லிஸ்ட்)\s+(?:அழி|காலி\s+செய்)\s*(?:வும்|ு)?",
@@ -159,14 +273,21 @@ TAMIL = Lexicon(
         r"எல்லாம்\s+(?:நீக்கு|அழி)\s*(?:வும்|ு)?",
         r"எல்லாவற்றையும்\s+நீக்கு",
         r"கிளியர்\s*(?:பண்ணு|செய்)?",
+        # Romanized
+        r"(?:list|pattiyal)\s+(?:azhi|azhinga|kaali\s*pannu|clear\s*pannu)",
+        r"ellam\s+(?:neeku|neekku|azhi)(?:nga)?",
+        r"ellathaiyum\s+neekku",
+        r"clear\s*(?:pannu|pannunga)?",
     ),
     confirm_words=frozenset({
         "ஆம்", "ஆமாம்", "சரி", "ஓகே", "நிச்சயம்", "செய்",
         "confirm", "yes", "ok",
+        "aamaam", "aama", "sari", "seri", "okay",
     }),
     cancel_words=frozenset({
         "இல்லை", "வேண்டாம்", "வேணாம்", "நிறுத்து", "ரத்து", "விடு",
         "cancel", "no", "stop",
+        "illai", "illa", "vendaam", "venaam", "nirutthu",
     }),
     number_words=_NUMBER_WORDS,
     tens_words={"இருபது": 20, "முப்பது": 30, "நாற்பது": 40, "ஐம்பது": 50},
@@ -177,11 +298,14 @@ TAMIL = Lexicon(
         r"கீழ்", r"கீழே", r"குறைவாக", r"குறைவான", r"வரை",
         r"விட\s+குறைவு", r"மலிவான",
         r"under", r"below",
+        r"keezh", r"keezhe", r"kammi(?:yaana|ya)?", r"varai",
+        r"kuraivaana", r"kuraiva",
     ),
     min_price_cues=(
         r"மேல்", r"மேலே", r"அதிகமாக", r"அதிகமான",
         r"விட\s+அதிகம்",
         r"over", r"above",
+        r"mela", r"mele", r"adhigamaana", r"adhigama",
     ),
     range_cues=(r"இடையே", r"இடையில்", r"between"),
     range_join=("மற்றும்", "முதல்", "to", "and"),
@@ -191,6 +315,7 @@ TAMIL = Lexicon(
         "டாலருக்கு", "டாலர்", "டாலர்கள்",
         "ரூபாய்க்கு", "ரூபாய்", "ரூபாய்கள்",
         "dollars", "rupees",
+        "dollar", "dollarukku", "rubaai", "rubaaikku", "rupaai",
     ),
     attributes=_ATTRIBUTES,
     item_aliases=_ITEM_ALIASES,
@@ -203,5 +328,8 @@ TAMIL = Lexicon(
         "ஆர்கானிக் ஆப்பிள் தேடு",
         "பற்பசை 5 டாலருக்கு கீழ் தேடு",
         "பட்டியல் காட்டு",
+        "ennaku oru muttai vendum",
+        "rendu litre paal vendum",
+        "list la irundhu paal neekku",
     ),
 )

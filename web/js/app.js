@@ -24,6 +24,8 @@ const IDLE_MESSAGE = isSupported
 /** A command held back waiting for a yes/no. */
 let pendingConfirmation = null;
 let suggestionsRequestId = 0;
+/** Language packs from /api/languages, used to label detected languages. */
+let languagePacks = [];
 
 /* ------------------------------------------------------------------ */
 /* Intent handlers                                                     */
@@ -286,10 +288,26 @@ async function runCommand(transcript) {
     return;
   }
 
+  // The parser may have found the utterance was in another language entirely.
+  // Move the picker to match, so the next spoken command uses the right
+  // speech-recognition locale rather than failing the same way.
+  const detectedPack = command.detected_language
+    ? languagePacks.find((pack) => pack.locale === command.detected_language)
+    : null;
+  if (detectedPack && detectedPack.locale !== store.language) {
+    store.setLanguage(detectedPack.locale);
+    ui.setLanguageSelection(detectedPack.locale);
+    loadExamples();
+    // No toast here: the command about to run raises its own, which would
+    // replace this one within the same frame. The tag on the Understood line
+    // and the picker visibly moving are what communicate the switch.
+  }
+
   ui.showFeedback({
     heard: text,
     understood: describeCommand(command),
     source: command.source,
+    detected: detectedPack ? detectedPack.label : null,
   });
 
   // Destructive commands, and anything the parser is unsure about, get a
@@ -536,8 +554,6 @@ function bindEvents() {
     else if (recognizer.isListening) recognizer.stop();
   });
 }
-
-let languagePacks = [];
 
 function loadExamples() {
   const pack = languagePacks.find((language) => language.locale === store.language);

@@ -81,7 +81,7 @@ export function setMicState(state, message, tone = null) {
   else delete elements.micStatus.dataset.tone;
 }
 
-export function showFeedback({ heard, understood, action, source }) {
+export function showFeedback({ heard, understood, action, source, detected }) {
   const rows = [
     [elements.heardRow, elements.heard, heard],
     [elements.understoodRow, elements.understood, understood],
@@ -100,7 +100,20 @@ export function showFeedback({ heard, understood, action, source }) {
   // Mark interpretations that came from the optional LLM fallback rather than
   // the deterministic parser, so the two are never confused.
   if (source === 'llm' && understood) {
-    elements.understood.appendChild(el('span', 'source-tag', 'AI'));
+    const tag = el('span', 'source-tag', 'AI');
+    // Without a label this runs straight into the preceding word for a screen
+    // reader, as "milkAI". The visible text stays the short badge.
+    tag.setAttribute('aria-label', 'interpreted by AI, please confirm');
+    elements.understood.appendChild(tag);
+  }
+
+  // Say so when the utterance turned out to be in a language other than the
+  // one selected. Silently switching the picker would be worse than not
+  // switching it: the user needs to know why it moved.
+  if (detected && understood) {
+    const tag = el('span', 'source-tag lang-tag', detected);
+    tag.setAttribute('aria-label', `detected language: ${detected}`);
+    elements.understood.appendChild(tag);
   }
 
   elements.feedback.hidden = !any;
@@ -140,6 +153,12 @@ export function renderExamples(examples, onPick) {
     chip.type = 'button';
     chip.addEventListener('click', () => onPick(example));
     elements.examples.appendChild(chip);
+  }
+}
+
+export function setLanguageSelection(locale) {
+  if ([...elements.language.options].some((option) => option.value === locale)) {
+    elements.language.value = locale;
   }
 }
 

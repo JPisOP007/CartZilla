@@ -34,7 +34,8 @@ required.
 - Speak a command; the app shows a live transcript as you talk.
 - Three-line feedback on every command: **what you said**, **what it
   understood**, **what it did**. Nothing happens invisibly.
-- Works in English, Hindi, Tamil and Spanish (see
+- Works in English, Hindi, Tamil and Spanish — **and works out which one you
+  used**, so leaving the picker on English and typing Tamil still works (see
   [multilingual support](#multilingual-support-and-its-limits)).
 - A text box is always available and does exactly the same thing, so the app is
   fully usable without a microphone.
@@ -292,7 +293,40 @@ registering it.
 | Attributes | ✅ | ✅ | ✅ | ✅ |
 | Catalogue search | ✅ | ✅ (vocabulary map) | ✅ (vocabulary map) | ✅ |
 
-Three structural differences are handled explicitly:
+### The picker is a hint, not a verdict
+
+The language picker sets the *speech-recognition locale*. That is a different
+question from what the user actually said, and treating it as the final word
+means answering "I didn't understand that" to a perfectly clear command — the
+worst possible response.
+
+So the selected language is tried first, and if it yields nothing (or only a
+weak guess) the other packs are tried too. Two signals drive it:
+
+- **Script.** Tamil and Devanagari have their own Unicode blocks, so a
+  non-Latin utterance identifies its language for free.
+- **Cue matching.** Romanized Tamil is Latin script and no script test can
+  find it, so the parser simply tries the other packs and keeps the best
+  interpretation.
+
+When another language wins, the UI tags the interpretation with the language it
+found and moves the picker, so the next *spoken* command uses the right locale
+instead of failing the same way.
+
+A different language has to be **strictly more confident** to take over. Every
+pack reads a bare "milk" identically, and a tie must leave the user's choice
+alone.
+
+### Romanized Tamil
+
+Many Tamil speakers type *"ennaku oru muttai vendum"* rather than switching
+keyboards, so the Tamil pack carries romanized forms alongside the script —
+cues, numerals, units and vocabulary. Transliteration is not standardised, so
+common spelling variants are listed (`rendu`/`irandu`, `anju`/`ainthu`,
+`neekku`/`neeku`). Note `vendum` (want → add) versus `vendaam` (don't want →
+remove): one syllable apart and opposite intents, which has a test.
+
+### Structural differences handled explicitly
 
 - **Hindi and Tamil are verb-final.** "दूध डालो" and "பால் சேர்" are literally
   *milk add*. Because cues are matched anywhere and then removed, word order
@@ -315,6 +349,12 @@ categorisation.
 - **Four languages, not "multilingual".** English, Hindi, Tamil and Spanish
   are implemented and tested. Other locales fall back to the English parser
   rather than erroring — best-effort, not support.
+- **Romanized input is only implemented for Tamil.** Hinglish would use exactly
+  the same mechanism — one dictionary of romanized surface forms in the Hindi
+  pack — but it is not written yet, so romanized Hindi will not parse.
+- **Language detection is cue-based, not statistical.** It finds languages this
+  app has packs for. It cannot detect a language it does not implement, and it
+  deliberately will not override a confident interpretation.
 - **The vocabulary map covers common groceries, roughly 60–90 nouns per
   language.** It is not a translator. An unusual Hindi or Spanish item name
   will still be added to your list correctly, but may not match a catalogue
@@ -386,12 +426,13 @@ automatically.
 pytest
 ```
 
-**347 tests, all passing**, covering the logic that would actually break:
+**389 tests, all passing**, covering the logic that would actually break:
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_parser_en.py` | 90 | Intents, phrasings, quantities, units, prices, brands, attributes, confidence, hostile input |
 | `test_parser_multilingual.py` | 90 | Hindi, Tamil & Spanish intents, numerals, units, price grammar, locale fallback |
+| `test_language_detection.py` | 42 | Script detection, romanized Tamil, and that English is never relabelled |
 | `test_catalog.py` | 51 | Catalogue integrity (every alternative/complement id resolves), categorisation, compound-name collisions |
 | `test_llm_fallback.py` | 37 | Fallback stays off without a key, never overrides the rules, survives every API failure mode |
 | `test_api.py` | 34 | Every endpoint, validation errors, 404s, static asset serving |
@@ -405,7 +446,10 @@ Several tests are named regressions for bugs found during development — for
 example `test_query_category_outranks_incidental_word_match` (searching "milk"
 used to return *Milk Chocolate Bar* first) and
 `test_hindi_combining_marks_survive_normalization` (a `\w`-based strip silently
-turned "मुझे" into "म झ"), and
+turned "मुझे" into "म झ"),
+`test_english_is_never_relabelled` (recomputing confidence during language
+detection made every pack look equally sure about "milk", so English commands
+were being tagged as Hindi), and
 `test_long_phrases_are_not_treated_as_bare_item_names` (an unbounded fallback
 turned "we are running low on that sourdough" into an item literally called
 that).
@@ -486,6 +530,7 @@ app/
     price.py               Price constraint extraction
     quantity.py            Quantity and unit extraction
     parser.py              The pipeline
+    detect.py              Which language the utterance is actually in
     llm.py                 Optional Groq fallback, for UNKNOWN only
     translate.py           Item name → catalogue vocabulary
     lexicons/
@@ -506,7 +551,7 @@ web/
     ui.js                  Rendering
     format.js              Shared display formatting
     app.js                 Orchestration and intent dispatch
-tests/                     347 tests
+tests/                     389 tests
 ```
 
 ---

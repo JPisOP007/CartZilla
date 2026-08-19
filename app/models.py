@@ -66,7 +66,13 @@ class ParsedCommand(BaseModel):
     intent: Intent = Intent.UNKNOWN
     transcript: str = ""
     normalized: str = ""
+    #: The locale actually used to parse. Usually the one the UI asked for,
+    #: but see ``detected_language``.
     language: str = "en-US"
+    #: Set when the utterance turned out to be in a different language from the
+    #: one selected - a Tamil sentence typed with the picker still on English.
+    #: The UI uses this to switch the picker and say so.
+    detected_language: str | None = None
 
     item: str | None = None
     #: ``item`` mapped onto the catalog's English vocabulary. Equal to ``item``
