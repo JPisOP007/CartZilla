@@ -1,0 +1,18 @@
+# Render deployment (https://render.com) - the simplest reliable host for this
+# app: one service, no container, no build step, free tier.
+#
+#   1. Push this repository to GitHub.
+#   2. Render -> New -> Blueprint -> pick the repo. This file does the rest.
+#
+# HTTPS is provided automatically, which the Web Speech API requires.
+services:
+  - type: web
+    name: voice-shopping-assistant
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"

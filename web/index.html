@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="A voice-driven shopping list with natural-language commands, smart suggestions and product search.">
+<meta name="theme-color" content="#0f766e">
+<title>Voice Shopping Assistant</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<a class="skip-link" href="#list-section">Skip to shopping list</a>
+
+<header class="app-header">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true">🛒</span>
+    <h1>Voice Shopping</h1>
+  </div>
+  <div class="header-controls">
+    <label class="visually-hidden" for="language">Voice language</label>
+    <select id="language" class="language-select" aria-describedby="language-hint">
+      <option value="en-US">English</option>
+    </select>
+  </div>
+</header>
+<p id="language-hint" class="visually-hidden">
+  Changes the language used for speech recognition and command understanding.
+</p>
+
+<main>
+  <!-- ============ Voice control ============ -->
+  <section class="voice-section" aria-labelledby="voice-heading">
+    <h2 id="voice-heading" class="visually-hidden">Voice command</h2>
+
+    <div id="unsupported-banner" class="banner banner-warning" hidden>
+      <strong>Voice input isn't available in this browser.</strong>
+      <span>Everything still works &mdash; type your command in the box below.
+      For voice, try Chrome, Edge, or Safari.</span>
+    </div>
+
+    <div id="mic-error" class="banner banner-error" hidden role="alert"></div>
+
+    <div class="mic-wrap">
+      <button id="mic" type="button" class="mic" aria-live="off"
+              aria-label="Start listening for a voice command">
+        <span class="mic-ring" aria-hidden="true"></span>
+        <span class="mic-glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="none"
+               stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+            <path d="M5 11a7 7 0 0 0 14 0"/>
+            <path d="M12 18v3"/>
+          </svg>
+        </span>
+      </button>
+      <p id="mic-status" class="mic-status">Tap the microphone and speak</p>
+    </div>
+
+    <!-- Live transcript + interpretation. aria-live so screen readers hear it. -->
+    <div id="feedback" class="feedback" role="status" aria-live="polite" hidden>
+      <div class="feedback-row" id="fb-heard-row" hidden>
+        <span class="feedback-label">You said</span>
+        <p class="feedback-value" id="fb-heard"></p>
+      </div>
+      <div class="feedback-row" id="fb-understood-row" hidden>
+        <span class="feedback-label">Understood</span>
+        <p class="feedback-value" id="fb-understood"></p>
+      </div>
+      <div class="feedback-row" id="fb-action-row" hidden>
+        <span class="feedback-label">Action</span>
+        <p class="feedback-value" id="fb-action"></p>
+      </div>
+    </div>
+
+    <!-- Confirmation prompt for destructive or low-confidence commands. -->
+    <div id="confirm-box" class="confirm-box" role="alertdialog"
+         aria-labelledby="confirm-text" hidden>
+      <p id="confirm-text"></p>
+      <div class="confirm-actions">
+        <button type="button" id="confirm-yes" class="btn btn-primary">Confirm</button>
+        <button type="button" id="confirm-no" class="btn btn-ghost">Cancel</button>
+      </div>
+    </div>
+
+    <!-- Keyboard/typed fallback. Always present, not just when voice fails. -->
+    <form id="text-form" class="text-form">
+      <label class="visually-hidden" for="text-input">Type a command</label>
+      <input id="text-input" class="text-input" type="text" autocomplete="off"
+             placeholder="or type: add 2 litres of milk"
+             enterkeyhint="send" maxlength="200">
+      <button type="submit" class="btn btn-primary btn-send" aria-label="Run command">
+        Send
+      </button>
+    </form>
+
+    <div class="examples" id="examples" aria-label="Example commands"></div>
+  </section>
+
+  <!-- ============ Search results ============ -->
+  <section id="search-section" class="panel" aria-labelledby="search-heading" hidden>
+    <div class="panel-head">
+      <h2 id="search-heading">Search results</h2>
+      <button type="button" id="search-close" class="btn btn-ghost btn-small">Close</button>
+    </div>
+    <div id="search-filters" class="chips"></div>
+    <div id="search-results" class="product-grid"></div>
+  </section>
+
+  <!-- ============ Shopping list ============ -->
+  <section id="list-section" class="panel" aria-labelledby="list-heading">
+    <div class="panel-head">
+      <h2 id="list-heading">Your shopping list</h2>
+      <span id="list-count" class="pill">0 items</span>
+    </div>
+    <div id="list-container"></div>
+    <div id="list-empty" class="empty-state">
+      <p class="empty-title">Your list is empty</p>
+      <p>Tap the microphone and say something like <em>&ldquo;I need 2 litres of milk&rdquo;</em>.</p>
+    </div>
+    <div class="list-actions" id="list-actions" hidden>
+      <button type="button" id="clear-completed" class="btn btn-ghost btn-small">
+        Clear completed
+      </button>
+      <button type="button" id="clear-all" class="btn btn-ghost btn-small btn-danger">
+        Clear list
+      </button>
+    </div>
+  </section>
+
+  <!-- ============ Suggestions ============ -->
+  <section class="panel" aria-labelledby="suggestions-heading">
+    <div class="panel-head">
+      <h2 id="suggestions-heading">Suggestions for you</h2>
+      <span class="pill pill-muted" id="suggestions-state">&nbsp;</span>
+    </div>
+    <p class="panel-note">
+      Based on what you buy, what's in season, and what pairs with your list.
+    </p>
+    <div id="suggestions" class="suggestion-grid"></div>
+  </section>
+
+  <footer class="app-footer">
+    <p>
+      Product catalogue and purchase history are <strong>sample data</strong>
+      for demonstration. Your list is stored only in this browser.
+    </p>
+    <p>
+      <button type="button" id="reset-demo" class="linkish">Reset demo data</button>
+      <span aria-hidden="true">&middot;</span>
+      <a href="/docs">API docs</a>
+    </p>
+  </footer>
+</main>
+
+<!-- Toast for transient confirmations, with undo. -->
+<div id="toast" class="toast" role="status" aria-live="polite" hidden>
+  <span id="toast-text"></span>
+  <button type="button" id="toast-undo" class="toast-undo" hidden>Undo</button>
+</div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
