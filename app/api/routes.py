@@ -26,6 +26,7 @@ from app.models import (
     SuggestionsRequest,
     SuggestionsResponse,
 )
+from app.nlp import llm
 from app.nlp.lexicons import get_lexicon, supported_languages
 from app.nlp.parser import parse as parse_command
 from app.recommend.engine import recommend, substitutes_for_name
@@ -53,6 +54,8 @@ def health() -> dict[str, object]:
         "status": "ok",
         "products": len(all_products()),
         "languages": [language["code"] for language in supported_languages()],
+        # Reports whether the fallback is configured, never the key itself.
+        "llm_fallback": llm.is_enabled(),
     }
 
 
@@ -79,6 +82,14 @@ def parse(request: ParseRequest) -> ParseResponse:
     """
     transcript = request.transcript.strip()
     command = parse_command(transcript, request.language)
+
+    # Rules first, always. The optional LLM fallback runs only when the
+    # deterministic parser found nothing, and only if a key is configured -
+    # so the common path stays offline, free and reproducible.
+    if command.intent is Intent.UNKNOWN and llm.is_enabled():
+        guess = llm.interpret(transcript, request.language)
+        if guess is not None:
+            command = guess
 
     search_response: SearchResponse | None = None
     if command.intent is Intent.SEARCH_PRODUCT:

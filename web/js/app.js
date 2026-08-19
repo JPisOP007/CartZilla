@@ -286,7 +286,11 @@ async function runCommand(transcript) {
     return;
   }
 
-  ui.showFeedback({ heard: text, understood: describeCommand(command) });
+  ui.showFeedback({
+    heard: text,
+    understood: describeCommand(command),
+    source: command.source,
+  });
 
   // Destructive commands, and anything the parser is unsure about, get a
   // confirmation step rather than being applied silently.

@@ -88,6 +88,10 @@ class ParsedCommand(BaseModel):
 
     #: 0.0-1.0 confidence in the interpretation as a whole.
     confidence: float = 0.0
+    #: Which layer produced this interpretation. "rules" is the deterministic
+    #: parser; "llm" is the optional fallback, shown as a badge in the UI so
+    #: the user can tell the difference.
+    source: Literal["rules", "llm"] = "rules"
     #: True when the intent is destructive and needs confirmation first.
     requires_confirmation: bool = False
     #: True when confidence is too low to act on without asking the user.

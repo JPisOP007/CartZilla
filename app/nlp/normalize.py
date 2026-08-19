@@ -16,6 +16,9 @@ _NON_ASCII_DIGITS = {
     # Devanagari (Hindi)
     "०": "0", "१": "1", "२": "2", "३": "3", "४": "4",
     "५": "5", "६": "6", "७": "7", "८": "8", "९": "9",
+    # Tamil
+    "௦": "0", "௧": "1", "௨": "2", "௩": "3", "௪": "4",
+    "௫": "5", "௬": "6", "௭": "7", "௮": "8", "௯": "9",
     # Arabic-Indic
     "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
     "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
@@ -31,6 +34,12 @@ _CONTRACTIONS = {
     "i'm": "i am",
     "i've": "i have",
     "i'll": "i will",
+    "we're": "we are",
+    "we've": "we have",
+    "we'll": "we will",
+    "you're": "you are",
+    "they're": "they are",
+    "it's": "it is",
     "don't": "do not",
     "doesn't": "does not",
     "didn't": "did not",

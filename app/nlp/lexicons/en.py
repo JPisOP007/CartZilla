@@ -90,7 +90,7 @@ _ATTRIBUTES: dict[str, str] = {
 
 _STOPWORDS: frozenset[str] = frozenset({
     "a", "an", "the", "some", "any", "of", "my", "our", "your", "please",
-    "to", "from", "on", "off", "in", "into", "for", "onto", "at", "and",
+    "to", "from", "on", "off", "out", "in", "into", "for", "onto", "at", "and",
     "list", "lists", "cart", "basket", "shopping", "grocery", "groceries",
     "item", "items", "thing", "things", "me", "i", "we", "it", "that",
     "this", "these", "those", "get", "got", "also", "too", "up",

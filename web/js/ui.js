@@ -57,12 +57,6 @@ const CATEGORY_ORDER = [
   'Beverages', 'Snacks', 'Personal Care', 'Household', 'Baby', 'Other',
 ];
 
-const CATEGORY_EMOJI = {
-  Produce: '🥬', Dairy: '🥛', Bakery: '🍞', 'Meat & Seafood': '🍗',
-  Pantry: '🥫', Frozen: '🧊', Beverages: '🥤', Snacks: '🍿',
-  'Personal Care': '🧴', Household: '🧻', Baby: '👶', Other: '🛒',
-};
-
 function el(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -87,7 +81,7 @@ export function setMicState(state, message, tone = null) {
   else delete elements.micStatus.dataset.tone;
 }
 
-export function showFeedback({ heard, understood, action }) {
+export function showFeedback({ heard, understood, action, source }) {
   const rows = [
     [elements.heardRow, elements.heard, heard],
     [elements.understoodRow, elements.understood, understood],
@@ -103,6 +97,12 @@ export function showFeedback({ heard, understood, action }) {
       row.hidden = true;
     }
   }
+  // Mark interpretations that came from the optional LLM fallback rather than
+  // the deterministic parser, so the two are never confused.
+  if (source === 'llm' && understood) {
+    elements.understood.appendChild(el('span', 'source-tag', 'AI'));
+  }
+
   elements.feedback.hidden = !any;
 }
 
@@ -181,11 +181,16 @@ export function renderList(items, handlers) {
 
   for (const category of ordered) {
     const group = el('div', 'category-group');
-    const title = el(
-      'h3',
-      'category-title',
-      `${CATEGORY_EMOJI[category] || '🛒'}  ${category}`
-    );
+    // Aisle label, then a dotted leader, then the count - set like a receipt
+    // line. The leader is drawn in CSS so it stays out of the accessible name.
+    const title = el('h3', 'category-title');
+    title.appendChild(el('span', 'category-label', category));
+    const size = grouped.get(category).length;
+    const count = el('span', 'category-count', size);
+    // Without this the heading reads as "Produce1": the leader between them is
+    // drawn in CSS, so there is no whitespace in the accessible name.
+    count.setAttribute('aria-label', `${size} item${size === 1 ? '' : 's'}`);
+    title.appendChild(count);
     group.appendChild(title);
 
     const list = el('ul');

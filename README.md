@@ -5,7 +5,8 @@ A voice-driven shopping list. Speak naturally — *"I need two litres of milk"*,
 out what you meant, does it, and tells you exactly what it understood.
 
 Built with **FastAPI + Python** for all the logic, and a small vanilla-JS
-frontend for speech capture and UI. No build step, no database, no API keys.
+frontend for speech capture and UI. No build step, no database, and no API key
+required.
 
 ---
 
@@ -15,6 +16,7 @@ frontend for speech capture and UI. No build step, no database, no API keys.
 - [Quick start](#quick-start)
 - [Architecture](#architecture)
 - [How the command parser works](#how-the-command-parser-works)
+- [The optional LLM fallback](#the-optional-llm-fallback)
 - [Multilingual support](#multilingual-support-and-its-limits)
 - [How recommendations work](#how-recommendations-work)
 - [Voice browser support](#voice-browser-support)
@@ -32,7 +34,7 @@ frontend for speech capture and UI. No build step, no database, no API keys.
 - Speak a command; the app shows a live transcript as you talk.
 - Three-line feedback on every command: **what you said**, **what it
   understood**, **what it did**. Nothing happens invisibly.
-- Works in English, Hindi and Spanish (see
+- Works in English, Hindi, Tamil and Spanish (see
   [multilingual support](#multilingual-support-and-its-limits)).
 - A text box is always available and does exactly the same thing, so the app is
   fully usable without a microphone.
@@ -112,9 +114,17 @@ Open <http://127.0.0.1:8000>. Interactive API docs are at `/docs`.
 
 ### Environment variables
 
-**None are required.** There is no database, no API key and no third-party
-service. See [`.env.example`](.env.example) for the two optional knobs (`PORT`,
-`LOG_LEVEL`) that hosting platforms normally set for you.
+**None are required.** There is no database and no mandatory third-party
+service; the app is fully functional with an empty environment.
+
+| Variable | Default | Effect |
+|---|---|---|
+| `GROQ_API_KEY` | *(unset)* | Enables the [LLM fallback](#the-optional-llm-fallback). Without it the app runs entirely offline. |
+| `GROQ_MODEL` | `llama-3.3-70b-versatile` | Model used by the fallback. |
+| `GROQ_TIMEOUT` | `4.0` | Seconds before the fallback gives up. |
+| `PORT` | `8000` | Set automatically by every supported host. |
+
+See [`.env.example`](.env.example). Never commit a key - `.env` is gitignored.
 
 ---
 
@@ -135,10 +145,14 @@ service. See [`.env.example`](.env.example) for the two optional knobs (`PORT`,
 │  intent dispatch       │              │      ↓                       │
 │      ↓                 │              │   catalog search  ───────────┤
 │  store.js              │              │   recommendations ───────────┤
-│   (localStorage)       │              │                              │
-│      ↓                 │              │   147-product JSON catalogue │
-│  ui.js  → render       │              │                              │
-└────────────────────────┘              └──────────────────────────────┘
+│   (localStorage)       │              │   147-product JSON catalogue │
+│      ↓                 │              │                              │
+│  ui.js  → render       │              │   ┌──────────────────────────┴─┐
+│                        │              │   │ UNKNOWN only: optional Groq│
+│                        │              │   │ fallback. Off by default,  │
+│                        │              │   │ never trusted without a    │
+│                        │              │   │ confirmation from the user.│
+└────────────────────────┘              └───┴────────────────────────────┘
 ```
 
 ### Why this shape
@@ -187,21 +201,74 @@ list**"* has the removal cue in two pieces around the item.
 mean…?"* rather than acting. Destructive commands always confirm, regardless of
 confidence.
 
-### Why not an LLM?
+### Why the rules come first
 
 The grammar of a shopping command is small and closed. A dictionary-driven
 parser is:
 
 - **Deterministic** — the same utterance always gives the same result, which
-  is what makes the 200+ tests meaningful.
+  is what makes the 347 tests meaningful.
 - **Free and offline** — no API key, no per-request cost, no rate limit.
 - **Fast** — sub-millisecond, no network hop on the critical path.
 - **Debuggable** — when it gets something wrong you can point at the rule.
 
-An LLM would be the right call for genuinely open-ended phrasing. If added, it
-belongs behind an adapter at the `parse()` boundary, as a fallback for
-`Intent.UNKNOWN`, so the app keeps working when the key is missing or the
-service is down.
+An LLM *is* the right call for genuinely open-ended phrasing, which is why
+there is one — strictly behind the rules. See below.
+
+---
+
+## The optional LLM fallback
+
+`app/nlp/llm.py` adds a Groq-backed fallback for the one thing the rules
+genuinely cannot do: interpret phrasing nobody anticipated.
+
+**It is off unless you configure it**, and it never sits on the main path:
+
+```
+utterance → deterministic parser → understood?  ──yes──▶ act
+                                        │
+                                        no
+                                        ▼
+                              GROQ_API_KEY set?  ──no──▶ "I didn't understand"
+                                        │
+                                       yes
+                                        ▼
+                              Groq → validate → ask the user to confirm
+```
+
+Four rules govern it, and each has tests:
+
+1. **Absent by default.** With no key the app behaves exactly as before —
+   same code path, same latency, same results.
+2. **Never raises.** Timeout, bad key, rate limit, malformed JSON, absurd
+   field values: every failure returns `None` and the user sees the ordinary
+   "I didn't understand that" message. A degraded LLM must never degrade the
+   app.
+3. **Never trusted blindly.** Results come back below the clarification
+   threshold, so the UI asks *"Did you mean…?"* rather than acting, and the
+   interpretation is tagged **AI** in the feedback panel. The model only runs
+   when the rules already failed — precisely when confidence should be low.
+4. **We own the taxonomy.** Categories and catalogue terms are computed by our
+   own code from the model's output, never taken from the model.
+
+Enable it by setting one environment variable:
+
+```bash
+export GROQ_API_KEY=your-key-here
+```
+
+Optional: `GROQ_MODEL` (default `llama-3.3-70b-versatile`) and `GROQ_TIMEOUT`
+(default `4.0` seconds). `GET /api/health` reports `llm_fallback: true/false`
+so you can confirm it is live — it never echoes the key.
+
+**Never commit the key.** `.env` is gitignored; set the variable in your host's
+dashboard.
+
+Examples the rules return `UNKNOWN` for, and the fallback can handle:
+
+- *"the bread situation in this house is dire"*
+- *"my teeth need something cheap"*
+- *"the kids finished all the cereal"*
 
 ---
 
@@ -215,22 +282,27 @@ and grocery vocabulary. The parser pipeline itself contains no
 language-specific logic. Adding a language means adding one module and
 registering it.
 
-| | English | Hindi | Spanish |
-|---|---|---|---|
-| Speech locale | `en-US` | `hi-IN` | `es-ES` |
-| Intent cues | ✅ | ✅ | ✅ |
-| Spelled-out numerals | ✅ | ✅ (+ Devanagari digits ०-९) | ✅ |
-| Units | ✅ | ✅ | ✅ |
-| Price filters | ✅ | ✅ (postpositional) | ✅ |
-| Attributes | ✅ | ✅ | ✅ |
-| Catalogue search | ✅ | ✅ (via vocabulary map) | ✅ |
+| | English | Hindi | Tamil | Spanish |
+|---|---|---|---|---|
+| Speech locale | `en-US` | `hi-IN` | `ta-IN` | `es-ES` |
+| Intent cues | ✅ | ✅ | ✅ | ✅ |
+| Spelled-out numerals | ✅ | ✅ (+ Devanagari ०-९) | ✅ (+ Tamil ௦-௯) | ✅ |
+| Units | ✅ | ✅ | ✅ | ✅ |
+| Price filters | ✅ | ✅ (postpositional) | ✅ (postpositional) | ✅ |
+| Attributes | ✅ | ✅ | ✅ | ✅ |
+| Catalogue search | ✅ | ✅ (vocabulary map) | ✅ (vocabulary map) | ✅ |
 
-Two structural differences are handled explicitly:
+Three structural differences are handled explicitly:
 
-- **Hindi is verb-final.** "दूध डालो" is literally *milk add*. Because cues are
-  matched anywhere and then removed, word order needs no special handling.
-- **Hindi price comparatives are postpositional.** "5 डॉलर से कम" is literally
-  *5 dollars from less*, so the Hindi pack sets `price_cue_position="both"`.
+- **Hindi and Tamil are verb-final.** "दूध डालो" and "பால் சேர்" are literally
+  *milk add*. Because cues are matched anywhere and then removed, word order
+  needs no special handling.
+- **Their price comparatives are postpositional.** "5 डॉलर से कम" is literally
+  *5 dollars from less*, so those packs set `price_cue_position="both"`.
+- **Tamil agglutinates.** Case markers fuse onto the noun, so "dollar" arrives
+  as டாலருக்கு rather than as a separate token. Both the bare and case-marked
+  forms are registered as currency words, so the amount pattern absorbs them
+  and leaves the comparative behind.
 
 **Display vs. lookup.** The catalogue is authored in English. Each non-English
 pack carries a dictionary of common grocery nouns (दूध → milk, leche → milk),
@@ -240,15 +312,16 @@ categorisation.
 
 ### The honest limitations
 
-- **Three languages, not "multilingual".** English, Hindi and Spanish are
-  implemented and tested. Other locales fall back to the English parser rather
-  than erroring — best-effort, not support.
+- **Four languages, not "multilingual".** English, Hindi, Tamil and Spanish
+  are implemented and tested. Other locales fall back to the English parser
+  rather than erroring — best-effort, not support.
 - **The vocabulary map covers common groceries, roughly 60–90 nouns per
   language.** It is not a translator. An unusual Hindi or Spanish item name
   will still be added to your list correctly, but may not match a catalogue
   product or categorise correctly.
 - **Hindi fractional numerals are partial.** डेढ़ (1.5) and ढाई (2.5) work as
-  number words; the prefix construction साढ़े तीन (3.5) does not.
+  number words; the prefix construction साढ़े तीन (3.5) does not. Tamil அரை
+  (0.5) and ஒன்றரை (1.5) work the same way.
 - **Browser speech quality varies by locale** and is outside the app's control.
 
 ---
@@ -313,22 +386,29 @@ automatically.
 pytest
 ```
 
-**264 tests, all passing**, covering the logic that would actually break:
+**347 tests, all passing**, covering the logic that would actually break:
 
 | File | Tests | Covers |
 |---|---|---|
-| `test_parser_en.py` | 77 | Intents, phrasings, quantities, units, prices, brands, attributes, confidence, hostile input |
-| `test_parser_multilingual.py` | 58 | Hindi & Spanish intents, numerals, units, price grammar, locale fallback |
-| `test_search.py` | 27 | Keyword relevance, brand/price/attribute/category filters, combined filters, no-result fallbacks |
+| `test_parser_en.py` | 90 | Intents, phrasings, quantities, units, prices, brands, attributes, confidence, hostile input |
+| `test_parser_multilingual.py` | 90 | Hindi, Tamil & Spanish intents, numerals, units, price grammar, locale fallback |
 | `test_catalog.py` | 51 | Catalogue integrity (every alternative/complement id resolves), categorisation, compound-name collisions |
+| `test_llm_fallback.py` | 37 | Fallback stays off without a key, never overrides the rules, survives every API failure mode |
+| `test_api.py` | 34 | Every endpoint, validation errors, 404s, static asset serving |
+| `test_search.py` | 27 | Keyword relevance, brand/price/attribute/category filters, combined filters, no-result fallbacks |
 | `test_recommend.py` | 18 | Frequency, recency decay, seasonality, complements, substitutes, exclusions |
-| `test_api.py` | 33 | Every endpoint, validation errors, 404s, static asset serving |
+
+No test makes a network call - the LLM tests stub the transport - so the suite
+runs offline in about a second.
 
 Several tests are named regressions for bugs found during development — for
 example `test_query_category_outranks_incidental_word_match` (searching "milk"
 used to return *Milk Chocolate Bar* first) and
 `test_hindi_combining_marks_survive_normalization` (a `\w`-based strip silently
-turned "मुझे" into "म झ").
+turned "मुझे" into "म झ"), and
+`test_long_phrases_are_not_treated_as_bare_item_names` (an unbounded fallback
+turned "we are running low on that sourdough" into an item literally called
+that).
 
 Run a subset:
 
@@ -406,10 +486,11 @@ app/
     price.py               Price constraint extraction
     quantity.py            Quantity and unit extraction
     parser.py              The pipeline
+    llm.py                 Optional Groq fallback, for UNKNOWN only
     translate.py           Item name → catalogue vocabulary
     lexicons/
       base.py              The shape of a language pack
-      en.py  hi.py  es.py  The three packs
+      en.py hi.py ta.py es.py    The four packs
   catalog/
     products.json          147 sample products
     data.py                Loading and lookup indexes
@@ -425,7 +506,7 @@ web/
     ui.js                  Rendering
     format.js              Shared display formatting
     app.js                 Orchestration and intent dispatch
-tests/                     264 tests
+tests/                     347 tests
 ```
 
 ---
@@ -436,7 +517,7 @@ Being straight about what this is and is not:
 
 1. **Not deployed.** No hosting credentials were available. Config is committed
    and the production build is verified locally, but there is no live URL.
-2. **Three languages**, not general multilingual support. Everything else falls
+2. **Four languages**, not general multilingual support. Everything else falls
    back to English parsing.
 3. **The product catalogue is sample data** — 147 hand-authored items with
    plausible US prices. It is not a real retailer feed, and stock status is
@@ -448,8 +529,10 @@ Being straight about what this is and is not:
 6. **`days_ago` in history does not advance.** It is recorded when an item is
    added and not aged by a background job, so recency scores drift over a long
    session.
-7. **No LLM.** Genuinely novel phrasing outside the cue dictionaries returns
-   `UNKNOWN` with a helpful prompt rather than a guess.
+7. **The LLM fallback is optional and off by default.** Without a
+   `GROQ_API_KEY`, novel phrasing outside the cue dictionaries returns
+   `UNKNOWN` with a helpful prompt rather than a guess. With one, results are
+   shown for confirmation rather than applied, and are tagged **AI** in the UI.
 8. **Speech accuracy is the browser's**, and varies considerably by locale,
    accent and background noise.
 9. **No authentication or rate limiting.** Appropriate for a stateless demo
@@ -463,20 +546,23 @@ Being straight about what this is and is not:
 
 Roughly in the order I would actually do them:
 
-1. **LLM fallback behind an adapter** for `UNKNOWN` intents only, keeping the
-   deterministic parser as the fast path and the LLM as a safety net.
-2. **Accounts and a real database** (Postgres), turning the stateless design
+1. **Accounts and a real database** (Postgres), turning the stateless design
    into a syncing one — the API shape barely changes, since history is already
    an explicit request parameter.
-3. **Real catalogue integration** via a retailer API, replacing
+2. **Real catalogue integration** via a retailer API, replacing
    `app/catalog/data.py` behind its existing interface.
-4. **Frontend tests** with Playwright for the journeys currently covered by
+3. **Frontend tests** with Playwright for the journeys currently covered by
    manual QA.
-5. **Learned recommendations** once real purchase data exists, keeping the
+4. **Cache LLM fallback results** by normalised utterance, so a phrasing the
+   rules miss costs one API call rather than one per user who says it.
+5. **Promote recurring fallback hits into rules.** Log which utterances the LLM
+   had to handle and turn the common ones into cue patterns — the LLM becomes a
+   source of training data for the dictionary, and gets cheaper over time.
+6. **Learned recommendations** once real purchase data exists, keeping the
    heuristic scores as explainable features rather than replacing them.
-6. **Offline support** via a service worker — the parser is server-side today,
+7. **Offline support** via a service worker — the parser is server-side today,
    which is the one thing standing between this and a fully offline PWA.
-7. **More languages**, which is now a data task rather than an engineering one.
+8. **More languages**, which is now a data task rather than an engineering one.
 
 ---
 

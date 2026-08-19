@@ -242,6 +242,41 @@ def test_bare_product_name_is_a_low_confidence_add() -> None:
     assert command.needs_clarification is True
 
 
+@pytest.mark.parametrize(
+    "utterance",
+    [
+        "we are running low on that sourdough",
+        "the bread situation in this house is dire",
+        "the kids finished all the cereal",
+        "nothing left in the pantry",
+        "my teeth need something cheap",
+    ],
+)
+def test_long_phrases_are_not_treated_as_bare_item_names(utterance: str) -> None:
+    """Regression: the bare-name fallback used to swallow whole sentences.
+
+    Each of these contains a word the categorizer recognises, so an unbounded
+    fallback turned the entire phrase into an item literally called
+    "running low on that sourdough". Staying UNKNOWN is more honest, and is
+    exactly the case the optional LLM fallback exists to pick up.
+    """
+    assert parse(utterance).intent is Intent.UNKNOWN
+
+
+@pytest.mark.parametrize(
+    "utterance", ["milk", "almond milk", "whole wheat bread", "organic milk"]
+)
+def test_short_bare_names_still_work(utterance: str) -> None:
+    assert parse(utterance).intent is Intent.ADD_ITEM
+
+
+def test_contractions_are_expanded_before_parsing() -> None:
+    """"we're out of eggs" is a request for eggs, not for "out of eggs"."""
+    command = parse("we're out of eggs")
+    assert command.intent is Intent.ADD_ITEM
+    assert command.item == "eggs"
+
+
 def test_confident_commands_do_not_need_clarification() -> None:
     for utterance in ["add milk", "I need 2 litres of milk", "remove milk"]:
         assert parse(utterance).needs_clarification is False

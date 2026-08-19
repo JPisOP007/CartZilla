@@ -25,7 +25,7 @@ def test_health(client: TestClient) -> None:
     body = response.json()
     assert body["status"] == "ok"
     assert body["products"] > 30
-    assert set(body["languages"]) == {"en", "hi", "es"}
+    assert set(body["languages"]) == {"en", "hi", "ta", "es"}
 
 
 def test_platform_healthz(client: TestClient) -> None:
@@ -34,7 +34,7 @@ def test_platform_healthz(client: TestClient) -> None:
 
 def test_languages_include_examples(client: TestClient) -> None:
     body = client.get("/api/languages").json()
-    assert len(body["languages"]) == 3
+    assert len(body["languages"]) == 4
     for language in body["languages"]:
         assert language["examples"], f"{language['code']} has no examples"
 

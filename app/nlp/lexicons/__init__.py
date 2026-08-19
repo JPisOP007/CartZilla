@@ -10,8 +10,9 @@ from app.nlp.lexicons.base import Lexicon
 from app.nlp.lexicons.en import ENGLISH
 from app.nlp.lexicons.es import SPANISH
 from app.nlp.lexicons.hi import HINDI
+from app.nlp.lexicons.ta import TAMIL
 
-LEXICONS: tuple[Lexicon, ...] = (ENGLISH, HINDI, SPANISH)
+LEXICONS: tuple[Lexicon, ...] = (ENGLISH, HINDI, TAMIL, SPANISH)
 
 DEFAULT_LEXICON: Lexicon = ENGLISH
 

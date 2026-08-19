@@ -60,6 +60,14 @@ _PRECEDENCE: tuple[Intent, ...] = (
 #: the threshold: the intent is a guess, and the UI must ask before acting.
 _BARE_ITEM_CONFIDENCE = round(LOW_CONFIDENCE - 0.05, 2)
 
+#: Longest utterance still treated as a bare product name. The fallback exists
+#: so that saying "milk" works; without a bound it also turns "we are running
+#: low on that sourdough" into an item literally called that, because the
+#: phrase happens to contain a word the categorizer recognises. Anything longer
+#: stays UNKNOWN, which is both more honest and the case the optional LLM
+#: fallback is there to pick up.
+_MAX_BARE_ITEM_TOKENS = 3
+
 #: Intents that are complete without an item.
 _ITEMLESS: frozenset[Intent] = frozenset({
     Intent.SHOW_LIST, Intent.CLEAR_LIST, Intent.CONFIRM, Intent.CANCEL,
@@ -328,7 +336,8 @@ def _parse(transcript: str, language: str = "en-US") -> ParsedCommand:
         # list - but at a confidence low enough that the UI asks first.
         candidate = _clean_item(remainder, lexicon)
         canonical = canonicalize(candidate, lexicon)
-        if canonical and categorize(canonical) is not Category.OTHER:
+        short_enough = bool(candidate) and len(candidate.split()) <= _MAX_BARE_ITEM_TOKENS
+        if short_enough and canonical and categorize(canonical) is not Category.OTHER:
             command.intent = Intent.ADD_ITEM
             command.item = candidate
             command.canonical_item = canonical
