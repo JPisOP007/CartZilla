@@ -43,7 +43,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(
     lifespan=lifespan,
-    title="Voice Command Shopping Assistant",
+    title="CartZilla",
     description=(
         "A voice-driven shopping list with natural-language command parsing, "
         "catalog search and explainable recommendations. The API is stateless: "

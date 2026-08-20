@@ -1,4 +1,4 @@
-# Voice Command Shopping Assistant
+# CartZilla
 
 A voice-driven shopping list. Speak naturally — *"I need two litres of milk"*,
 *"find toothpaste under $5"*, *"remove milk from my list"* — and the app works
@@ -493,7 +493,7 @@ npx vercel --prod
 ### Google Cloud Run — no Dockerfile needed
 
 ```bash
-gcloud run deploy voice-shopping --source . --allow-unauthenticated
+gcloud run deploy cartzilla --source . --allow-unauthenticated
 ```
 
 Cloud Run's buildpacks detect `requirements.txt` and `Procfile` automatically.

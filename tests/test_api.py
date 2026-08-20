@@ -243,7 +243,7 @@ def test_product_detail_404(client: TestClient) -> None:
 def test_frontend_is_served(client: TestClient) -> None:
     response = client.get("/")
     assert response.status_code == 200
-    assert "Voice Shopping" in response.text
+    assert "CartZilla" in response.text
 
 
 @pytest.mark.parametrize(

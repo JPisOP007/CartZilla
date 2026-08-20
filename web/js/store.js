@@ -8,10 +8,10 @@
  * the app keeps working in memory for the session and says so once.
  */
 
-const LIST_KEY = 'vsa.list.v1';
-const HISTORY_KEY = 'vsa.history.v1';
-const LANG_KEY = 'vsa.language.v1';
-const SEEDED_KEY = 'vsa.seeded.v1';
+const LIST_KEY = 'cartzilla.list.v1';
+const HISTORY_KEY = 'cartzilla.history.v1';
+const LANG_KEY = 'cartzilla.language.v1';
+const SEEDED_KEY = 'cartzilla.seeded.v1';
 
 /** Sample purchase history, so recommendations are meaningful on first load. */
 const DEMO_HISTORY = [

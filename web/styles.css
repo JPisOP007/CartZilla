@@ -1,4 +1,4 @@
-/* Voice Shopping Assistant
+/* CartZilla
    ---------------------------------------------------------------------------
    Design note: this is styled as paper and ink rather than as a dashboard.
    A shopping list is a receipt, so the page borrows from that - warm stock,
@@ -105,8 +105,8 @@ p { margin: 0; }
 
 .brand { display: flex; align-items: baseline; gap: .5rem; min-width: 0; }
 
-/* A typographic lockup rather than an icon: the ampersand-free wordmark in a
-   serif, with the accent carried by a single rule beneath the "V". */
+/* A typographic lockup rather than an icon: the wordmark set in a serif,
+   with the accent carried by a single rule beneath the "C". */
 .brand h1 {
   font-family: var(--serif);
   font-size: 1.15rem;
