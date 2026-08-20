@@ -613,4 +613,7 @@ Roughly in the order I would actually do them:
 
 ## Licence
 
-Sample project built for a technical assessment. Product data is fictional.
+[MIT](LICENSE).
+
+Built as a technical assessment. The product catalogue and purchase history are
+fictional sample data, not a real retailer feed.
