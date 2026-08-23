@@ -95,6 +95,11 @@ class Lexicon:
     #: Words separating an update's target from its replacement ("to").
     replacement_cues: tuple[str, ...] = ()
 
+    #: Words joining several items in one command ("milk and eggs"). Price
+    #: ranges also use "and", but price is extracted first, so by the time
+    #: these are applied the range has already been consumed.
+    conjunctions: tuple[str, ...] = ()
+
     #: Shown in the UI as tappable example commands.
     examples: tuple[str, ...] = ()
 

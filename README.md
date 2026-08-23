@@ -1,5 +1,7 @@
 # CartZilla
 
+**Live: https://cartzilla-admk.onrender.com**
+
 A voice-driven shopping list. Speak naturally — *"I need two litres of milk"*,
 *"find toothpaste under $5"*, *"remove milk from my list"* — and the app works
 out what you meant, does it, and tells you exactly what it understood.
@@ -46,6 +48,10 @@ Not string matching. All of these reach the same intent:
 | You say | Intent | Extracted |
 |---|---|---|
 | "Add milk" | `ADD_ITEM` | item=milk |
+| "Add milk and eggs" | `ADD_ITEM` | 2 items: milk, eggs |
+| "Add 2 litres of milk and 3 eggs" | `ADD_ITEM` | milk qty=2 unit=litre; eggs qty=3 |
+| "Add half a kilo of tomatoes" | `ADD_ITEM` | item=tomatoes, qty=0.5, unit=kg |
+| "Actually make that three" | `UPDATE_ITEM` | qty=3 on the last item |
 | "I need apples" | `ADD_ITEM` | item=apples |
 | "I want to buy bananas" | `ADD_ITEM` | item=bananas |
 | "Put eggs on my shopping list" | `ADD_ITEM` | item=eggs |
@@ -198,6 +204,19 @@ an item called "everything"). Every cue belonging to the winning intent is
 stripped, which is how English separable verbs work: *"take eggs **off my
 list**"* has the removal cue in two pieces around the item.
 
+**Several items in one command.** "Add milk and eggs" is two items, each
+parsed independently, so "add 2 litres of milk and 3 eggs" gets the quantities
+right. The hard part is that "and" is not always a separator:
+
+- `two **and** a half kg of potatoes` — belongs to the quantity
+- `between $3 **and** $6` — belongs to the price range
+- `milk **and** eggs` — a genuine list
+
+Two rules keep them apart. Price is extracted *before* splitting, so a range
+has already been consumed. And a split only happens if **every** resulting
+segment names something — "two" alone does not, so that command stays whole.
+A phrase that names a real catalog product is never split either.
+
 **Confidence** is reported on every command. Below `0.45` the UI asks *"Did you
 mean…?"* rather than acting. Destructive commands always confirm, regardless of
 confidence.
@@ -349,6 +368,12 @@ categorisation.
 - **Four languages, not "multilingual".** English, Hindi, Tamil and Spanish
   are implemented and tested. Other locales fall back to the English parser
   rather than erroring — best-effort, not support.
+- **Compound product names not in the catalogue will split.** "Mac and
+  cheese" would become two items, because the guard against splitting only
+  recognises phrases the catalogue actually carries. An extra item is the
+  safer failure than a silently missing one.
+- **Tamil's -um conjunction only splits when written separately.** Fused onto
+  the noun it cannot be detected.
 - **Romanized input is only implemented for Tamil.** Hinglish would use exactly
   the same mechanism — one dictionary of romanized surface forms in the Hindi
   pack — but it is not written yet, so romanized Hindi will not parse.
@@ -426,13 +451,14 @@ automatically.
 pytest
 ```
 
-**389 tests, all passing**, covering the logic that would actually break:
+**423 tests, all passing**, covering the logic that would actually break:
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_parser_en.py` | 90 | Intents, phrasings, quantities, units, prices, brands, attributes, confidence, hostile input |
 | `test_parser_multilingual.py` | 90 | Hindi, Tamil & Spanish intents, numerals, units, price grammar, locale fallback |
 | `test_language_detection.py` | 42 | Script detection, romanized Tamil, and that English is never relabelled |
+| `test_parser_robustness.py` | 34 | Multi-item commands, fractions of a unit, discourse fillers, apostrophe-less contractions |
 | `test_catalog.py` | 51 | Catalogue integrity (every alternative/complement id resolves), categorisation, compound-name collisions |
 | `test_llm_fallback.py` | 37 | Fallback stays off without a key, never overrides the rules, survives every API failure mode |
 | `test_api.py` | 34 | Every endpoint, validation errors, 404s, static asset serving |
@@ -464,12 +490,13 @@ pytest tests/test_parser_en.py -v
 
 ## Deployment
 
-> **Not deployed.** No hosting credentials were available in this environment,
-> so there is no live URL. The production build **has** been verified locally:
-> a clean virtualenv with production-only dependencies, started with the exact
-> command below, serving every route correctly.
+**Deployed on Render: https://cartzilla-admk.onrender.com**
 
-### Render — recommended, ~2 minutes
+> On Render's free tier the service sleeps after ~15 minutes idle, so the first
+> request after a quiet spell takes around 30 seconds to wake. Subsequent
+> requests are immediate.
+
+### Render — how it was deployed, ~2 minutes
 
 Simplest reliable option for a Python service: free tier, no container, HTTPS
 included. [`render.yaml`](render.yaml) is committed, so:
@@ -551,7 +578,7 @@ web/
     ui.js                  Rendering
     format.js              Shared display formatting
     app.js                 Orchestration and intent dispatch
-tests/                     389 tests
+tests/                     423 tests
 ```
 
 ---
@@ -560,8 +587,8 @@ tests/                     389 tests
 
 Being straight about what this is and is not:
 
-1. **Not deployed.** No hosting credentials were available. Config is committed
-   and the production build is verified locally, but there is no live URL.
+1. **Free-tier hosting sleeps.** The first request after ~15 minutes idle
+   takes about 30 seconds while the instance wakes.
 2. **Four languages**, not general multilingual support. Everything else falls
    back to English parsing.
 3. **The product catalogue is sample data** — 147 hand-authored items with

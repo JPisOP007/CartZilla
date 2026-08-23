@@ -97,6 +97,17 @@ _STOPWORDS: frozenset[str] = frozenset({
     "more", "another", "with", "want", "need", "like", "would", "can",
     "could", "let", "us", "there", "is", "are", "am", "be",
     "show", "give", "bring",
+    # Discourse fillers. People lead into corrections with these constantly
+    # ("actually make that three"), and without them the filler becomes the
+    # item name.
+    "actually", "basically", "literally", "honestly", "obviously",
+    "um", "uh", "erm", "hmm", "eh", "oh", "ah",
+    "just", "maybe", "perhaps", "probably", "definitely",
+    "so", "well", "right", "okay", "ok", "now", "then", "still",
+    "hey", "hi", "hello", "please", "thanks", "cheers",
+    "sorry", "wait", "hold", "on",
+    # A stray separator token from normalization.
+    ",",
 })
 
 ENGLISH = Lexicon(
@@ -218,6 +229,7 @@ ENGLISH = Lexicon(
     attributes=_ATTRIBUTES,
     stopwords=_STOPWORDS,
     replacement_cues=(r"to", r"into", r"with", r"for", r"instead\s+of"),
+    conjunctions=(r"and", r"plus", r"also", r"as\s+well\s+as", r","),
     examples=(
         "I need 2 litres of milk",
         "Add 2 bottles of water",

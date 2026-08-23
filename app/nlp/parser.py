@@ -22,12 +22,14 @@ from functools import lru_cache
 
 from app.catalog.categorize import categorize
 from app.catalog.data import known_brands
+from app.catalog.search import phrase_names_a_product
 from app.models import (
     DESTRUCTIVE_INTENTS,
     LOW_CONFIDENCE,
     Category,
     Intent,
     ParsedCommand,
+    ParsedItem,
 )
 from app.nlp.detect import detect_script_language
 from app.nlp.lexicons import LEXICONS, Lexicon, get_lexicon
@@ -68,6 +70,12 @@ _BARE_ITEM_CONFIDENCE = round(LOW_CONFIDENCE - 0.05, 2)
 #: stays UNKNOWN, which is both more honest and the case the optional LLM
 #: fallback is there to pick up.
 _MAX_BARE_ITEM_TOKENS = 3
+
+#: Intents where naming several things at once is normal. A search is not
+#: one of them: "find milk and eggs" is one query, not two.
+_MULTI_ITEM_INTENTS: frozenset[Intent] = frozenset({
+    Intent.ADD_ITEM, Intent.REMOVE_ITEM, Intent.COMPLETE_ITEM,
+})
 
 #: Intents that are complete without an item.
 _ITEMLESS: frozenset[Intent] = frozenset({
@@ -189,6 +197,58 @@ def _remove_spans(text: str, spans: list[tuple[int, int]]) -> str:
     for span in sorted(spans, reverse=True):
         text = remove_span(text, span)
     return text
+
+
+@lru_cache(maxsize=32)
+def _conjunction_pattern(lexicon: Lexicon) -> re.Pattern[str] | None:
+    if not lexicon.conjunctions:
+        return None
+    joined = "|".join(f"(?:{cue})" for cue in lexicon.conjunctions)
+    return re.compile(rf"{WORD_START}(?:{joined}){WORD_END}")
+
+
+def _split_items(text: str, lexicon: Lexicon) -> list[str]:
+    """Split "milk and eggs" into two segments, or return the text unchanged.
+
+    Runs after price extraction, so a range's "and" ("between $3 and $6") has
+    already been consumed and cannot be mistaken for a list separator.
+    """
+    pattern = _conjunction_pattern(lexicon)
+    if pattern is None:
+        return [text]
+
+    segments = [segment.strip() for segment in pattern.split(text)]
+    segments = [segment for segment in segments if segment]
+    if len(segments) < 2:
+        return [text]
+
+    # A phrase that names one real product stays whole.
+    if phrase_names_a_product(text):
+        return [text]
+    return segments
+
+
+def _extract_item_spec(text: str, lexicon: Lexicon) -> ParsedItem | None:
+    """Pull one item, with its own quantity and modifiers, out of a segment."""
+    quantity = extract_quantity(text, lexicon)
+    brand, rest = _extract_brand(quantity.text)
+    attributes, rest = _extract_attributes(rest, lexicon)
+
+    name = _clean_item(rest, lexicon)
+    if not name:
+        return None
+
+    canonical = canonicalize(name, lexicon)
+    category = categorize(canonical) if canonical else Category.OTHER
+    return ParsedItem(
+        item=name,
+        canonical_item=canonical,
+        quantity=quantity.value,
+        unit=quantity.unit,
+        brand=brand,
+        attributes=attributes,
+        category=category if category is not Category.OTHER else None,
+    )
 
 
 def _extract_attributes(text: str, lexicon: Lexicon) -> tuple[list[str], str]:
@@ -414,6 +474,42 @@ def _parse(transcript: str, language: str = "en-US") -> ParsedCommand:
     command.min_price = price.min_price
     command.max_price = price.max_price
     remainder = price.text
+
+    if intent in _MULTI_ITEM_INTENTS:
+        specs: list[ParsedItem] = []
+
+        # Split only when every segment names something. "two and a half kg of
+        # potatoes" contains an "and" that belongs to the quantity, not to a
+        # list, and splitting there would silently drop the "two".
+        segments = _split_items(remainder, lexicon)
+        if len(segments) > 1:
+            candidates = [
+                _extract_item_spec(segment, lexicon) for segment in segments
+            ]
+            if all(candidate is not None for candidate in candidates):
+                specs = [c for c in candidates if c is not None]
+
+        if not specs:
+            single = _extract_item_spec(remainder, lexicon)
+            specs = [single] if single is not None else []
+
+        if specs:
+            command.items = specs
+            # The scalar fields mirror the first item, so every existing
+            # caller - search, the confidence score, the API contract - keeps
+            # working without knowing about the list.
+            first = specs[0]
+            command.item = first.item
+            command.canonical_item = first.canonical_item
+            command.quantity = first.quantity
+            command.unit = first.unit
+            command.brand = first.brand
+            command.attributes = first.attributes
+            command.category = first.category
+
+        command.requires_confirmation = intent in DESTRUCTIVE_INTENTS
+        command.confidence = _confidence(command)
+        return command
 
     replacement_text = ""
     if intent is Intent.UPDATE_ITEM:

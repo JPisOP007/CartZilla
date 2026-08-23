@@ -23,4 +23,4 @@ and price grammar — and the picker is treated as a hint, not a verdict: the
 parser identifies the language by script or by cues, so Tamil typed under an
 English selection works, romanized included.
 
-389 tests pass.
+423 tests pass.

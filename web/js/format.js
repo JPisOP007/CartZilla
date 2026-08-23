@@ -59,6 +59,13 @@ export function formatItemPhrase({ name, quantity = null, unit = null }) {
   return parts.filter(Boolean).join(' ');
 }
 
+/** "milk", "milk and eggs", "milk, eggs and bread". */
+export function formatList(parts) {
+  const clean = parts.filter(Boolean);
+  if (clean.length <= 1) return clean[0] || '';
+  return `${clean.slice(0, -1).join(', ')} and ${clean[clean.length - 1]}`;
+}
+
 export function money(value) {
   return `$${Number(value).toFixed(2)}`;
 }

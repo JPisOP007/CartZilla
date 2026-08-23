@@ -55,6 +55,23 @@ class Category(str, Enum):
     OTHER = "Other"
 
 
+class ParsedItem(BaseModel):
+    """One item from a command, with its own quantity and modifiers.
+
+    A single utterance can name several: "add 2 litres of milk and 3 eggs" is
+    two items with different quantities, and each is parsed independently.
+    """
+
+    item: str
+    #: ``item`` mapped onto the catalog's English vocabulary.
+    canonical_item: str | None = None
+    quantity: float | None = None
+    unit: str | None = None
+    brand: str | None = None
+    attributes: list[str] = Field(default_factory=list)
+    category: Category | None = None
+
+
 class ParsedCommand(BaseModel):
     """Structured interpretation of a single utterance.
 
@@ -73,6 +90,12 @@ class ParsedCommand(BaseModel):
     #: one selected - a Tamil sentence typed with the picker still on English.
     #: The UI uses this to switch the picker and say so.
     detected_language: str | None = None
+
+    #: Every item the command names. Length 1 for an ordinary command; longer
+    #: when several were listed at once. The scalar ``item``/``quantity``/
+    #: ``unit``/``brand``/``attributes``/``category`` fields below mirror
+    #: ``items[0]``, so a caller that only handles one item still works.
+    items: list[ParsedItem] = Field(default_factory=list)
 
     item: str | None = None
     #: ``item`` mapped onto the catalog's English vocabulary. Equal to ``item``
@@ -107,6 +130,20 @@ class ParsedCommand(BaseModel):
 
     def summary(self) -> str:
         """Human-readable echo of the interpretation for the feedback line."""
+        if len(self.items) > 1:
+            return ", ".join(
+                " ".join(
+                    part
+                    for part in (
+                        f"{entry.quantity:g}" if entry.quantity is not None else "",
+                        entry.unit or "",
+                        entry.item,
+                    )
+                    if part
+                )
+                for entry in self.items
+            )
+
         bits: list[str] = []
         if self.quantity is not None:
             qty = f"{self.quantity:g}"

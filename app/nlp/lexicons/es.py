@@ -220,6 +220,7 @@ SPANISH = Lexicon(
     item_aliases=_ITEM_ALIASES,
     stopwords=_STOPWORDS,
     replacement_cues=(r"por", r"a", r"con", r"en\s+vez\s+de"),
+    conjunctions=(r"y", r"e", r"m[áa]s", r","),
     examples=(
         "Necesito dos litros de leche",
         "Añade 5 manzanas",

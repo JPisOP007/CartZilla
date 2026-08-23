@@ -49,6 +49,30 @@ _CONTRACTIONS = {
     "that's": "that is",
     "what's": "what is",
     "there's": "there is",
+    # Dictation and fast typing drop the apostrophe far more often than they
+    # drop the letters. Only unambiguous forms are listed: "id", "were" and
+    # "hes" are all real words, so they are deliberately absent.
+    "whats": "what is",
+    "wheres": "where is",
+    "hows": "how is",
+    "thats": "that is",
+    "theres": "there is",
+    "dont": "do not",
+    "doesnt": "does not",
+    "didnt": "did not",
+    "isnt": "is not",
+    "arent": "are not",
+    "wasnt": "was not",
+    "wont": "will not",
+    "cant": "can not",
+    "couldnt": "could not",
+    "wouldnt": "would not",
+    "shouldnt": "should not",
+    "im": "i am",
+    "ive": "i have",
+    "youre": "you are",
+    "theyre": "they are",
+    "lets": "let us",
 }
 
 _SMART_QUOTES = str.maketrans({
@@ -59,7 +83,7 @@ _SMART_QUOTES = str.maketrans({
 # Decimal points, hyphens (low-fat, gluten-free), slashes and the currency
 # marker carry meaning; everything else punctuation-happy speech engines emit
 # is noise.
-_KEEP_PUNCT = frozenset({".", "-", "/", "%", CURRENCY_MARKER})
+_KEEP_PUNCT = frozenset({".", "-", "/", "%", ",", CURRENCY_MARKER})
 
 _MULTI_SPACE = re.compile(r"\s+")
 # A period only survives if it sits between two digits (1.5 litres).
@@ -96,6 +120,15 @@ def _fold_currency(text: str) -> str:
     return text
 
 
+def _isolate_commas(text: str) -> str:
+    """Give commas their own token.
+
+    "milk, eggs" becomes "milk , eggs", so a list of items can be split on the
+    comma without it ever ending up glued to a product name.
+    """
+    return text.replace(",", " , ")
+
+
 def _expand_contractions(text: str) -> str:
     for contraction, expansion in _CONTRACTIONS.items():
         text = re.sub(rf"\b{re.escape(contraction)}\b", expansion, text)
@@ -120,6 +153,7 @@ def normalize(text: str) -> str:
     text = _expand_contractions(text)
     text = _fold_digits(text)
     text = _fold_currency(text)
+    text = _isolate_commas(text)
     text = _strip_punctuation(text)
     text = _TRAILING_DOTS.sub(" ", text)
     text = _MULTI_SPACE.sub(" ", text)

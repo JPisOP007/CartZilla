@@ -222,3 +222,24 @@ def best_match(name: str, *, min_score: float = 3.0) -> Product | None:
         if score >= min_score and (best is None or score > best[0]):
             best = (score, product)
     return best[1] if best else None
+
+
+def phrase_names_a_product(phrase: str) -> bool:
+    """True when the whole phrase is the name of a single catalog product.
+
+    Guards conjunction splitting. "milk and eggs" is two items; something like
+    "mac and cheese" is one, and splitting it would put two nonsense entries on
+    the list. Compound names the catalog does not carry will still split, which
+    is the safer failure: an extra item is easier to spot than a missing one.
+    """
+    needle = singularize_phrase(normalize(phrase)).strip()
+    if not needle:
+        return False
+    padded = f" {needle} "
+    for product in all_products():
+        if padded in f" {singularize_phrase(product.name.lower())} ":
+            return True
+        for tag in product.tags:
+            if padded in f" {singularize_phrase(tag.lower())} ":
+                return True
+    return False

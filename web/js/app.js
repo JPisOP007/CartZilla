@@ -12,7 +12,12 @@
  */
 
 import { ApiError, fetchSuggestions, fetchLanguages, parseCommand } from './api.js';
-import { formatItemPhrase, formatNumber, formatUnit } from './format.js';
+import {
+  formatItemPhrase,
+  formatList,
+  formatNumber,
+  formatUnit,
+} from './format.js';
 import { createRecognizer, isSupported } from './speech.js';
 import { store } from './store.js';
 import * as ui from './ui.js';
@@ -31,44 +36,88 @@ let languagePacks = [];
 /* Intent handlers                                                     */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Every item a command named. One utterance can list several
+ * ("add milk and eggs"), so the parser returns a list; older single-item
+ * shapes are normalised into the same form here.
+ */
+function itemsOf(command) {
+  if (Array.isArray(command.items) && command.items.length) return command.items;
+  if (!command.item) return [];
+  return [
+    {
+      item: command.item,
+      quantity: command.quantity,
+      unit: command.unit,
+      attributes: command.attributes,
+      category: command.category,
+    },
+  ];
+}
+
+/**
+ * Attributes are part of what the user asked for: "add organic milk" must land
+ * on the list as "organic milk", not a plain "milk". The parser reports them
+ * separately so search can filter on them, so they are re-joined here.
+ */
+function displayNameFor(entry) {
+  return [...(entry.attributes || []), entry.item].filter(Boolean).join(' ');
+}
+
 function handleAdd(command) {
-  if (!command.item) {
+  const entries = itemsOf(command);
+  if (!entries.length) {
     return { ok: false, message: "I didn't catch what to add. Try \"add milk\"." };
   }
-  // Attributes are part of what the user asked for: "add organic milk" must
-  // land on the list as "organic milk", not as a plain "milk". The parser
-  // reports them separately so search can filter on them, so re-join them here.
-  const displayName = [...(command.attributes || []), command.item]
-    .filter(Boolean)
-    .join(' ');
 
-  const result = store.add({
-    name: displayName,
-    quantity: command.quantity,
-    unit: command.unit,
-    category: command.category || 'Other',
-  });
-  if (!result) {
+  const added = [];
+  for (const entry of entries) {
+    const name = displayNameFor(entry);
+    const result = store.add({
+      name,
+      quantity: entry.quantity,
+      unit: entry.unit,
+      category: entry.category || 'Other',
+    });
+    if (result) {
+      added.push(
+        formatItemPhrase({ name, quantity: entry.quantity, unit: entry.unit })
+      );
+    }
+  }
+
+  if (!added.length) {
     return { ok: false, message: "I couldn't add that. Try naming the item again." };
   }
-  const verb = result.merged ? 'Updated' : 'Added';
-  const phrase = formatItemPhrase({
-    name: displayName,
-    quantity: command.quantity,
-    unit: command.unit,
-  });
-  return { ok: true, message: `${verb} ${phrase}`, undoable: true };
+  return { ok: true, message: `Added ${formatList(added)}`, undoable: true };
 }
 
 function handleRemove(command) {
-  if (!command.item) {
+  const entries = itemsOf(command);
+  if (!entries.length) {
     return { ok: false, message: 'Tell me what to remove, for example "remove milk".' };
   }
-  const removed = store.remove(command.item);
-  if (!removed) {
-    return { ok: false, message: `"${command.item}" isn't on your list.` };
+
+  const removed = [];
+  const missing = [];
+  for (const entry of entries) {
+    const gone = store.remove(entry.item);
+    if (gone) removed.push(gone.name);
+    else missing.push(entry.item);
   }
-  return { ok: true, message: `Removed ${removed.name}`, undoable: true };
+
+  if (!removed.length) {
+    return { ok: false, message: `"${formatList(missing)}" isn't on your list.` };
+  }
+  // Report partial success honestly rather than claiming everything worked.
+  const note = missing.length
+    ? ` (${formatList(missing)} wasn't on your list)`
+    : '';
+  return {
+    ok: true,
+    message: `Removed ${formatList(removed)}${note}`,
+    undoable: true,
+  };
 }
 
 function handleUpdate(command) {
@@ -100,12 +149,18 @@ function handleUpdate(command) {
 }
 
 function handleComplete(command) {
-  if (!command.item) {
+  const entries = itemsOf(command);
+  if (!entries.length) {
     return { ok: false, message: 'Which item did you get?' };
   }
-  const done = store.complete(command.item);
-  if (!done) return { ok: false, message: `"${command.item}" isn't on your list.` };
-  return { ok: true, message: `Ticked off ${done.name}` };
+  const done = entries.map((entry) => store.complete(entry.item)).filter(Boolean);
+  if (!done.length) {
+    return {
+      ok: false,
+      message: `"${formatList(entries.map((e) => e.item))}" isn't on your list.`,
+    };
+  }
+  return { ok: true, message: `Ticked off ${formatList(done.map((d) => d.name))}` };
 }
 
 function handleShow() {
@@ -171,6 +226,26 @@ function describeCommand(command) {
       ? formatNumber(command.quantity) +
         (command.unit ? ` ${formatUnit(command.unit, command.quantity)}` : '')
       : '';
+
+  const entries = itemsOf(command);
+  if (entries.length > 1) {
+    const listed = entries.map((entry) =>
+      [
+        entry.quantity !== null && entry.quantity !== undefined
+          ? formatNumber(entry.quantity) +
+            (entry.unit ? ` ${formatUnit(entry.unit, entry.quantity)}` : '')
+          : '',
+        ...(entry.attributes || []),
+        entry.item,
+      ]
+        .filter(Boolean)
+        .join(' ')
+    );
+    const verb = { ADD_ITEM: 'Add', REMOVE_ITEM: 'Remove', COMPLETE_ITEM: 'Tick off' }[
+      command.intent
+    ] || command.intent;
+    return `${verb} · ${formatList(listed)}`;
+  }
 
   const detail = [];
   if (command.intent === 'UPDATE_ITEM') {

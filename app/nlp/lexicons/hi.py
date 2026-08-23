@@ -182,6 +182,7 @@ HINDI = Lexicon(
     item_aliases=_ITEM_ALIASES,
     stopwords=_STOPWORDS,
     replacement_cues=(r"की\s+जगह", r"के\s+बदले", r"में", r"को", r"से"),
+    conjunctions=(r"और", r","),
     examples=(
         "मुझे दो लीटर दूध चाहिए",
         "पांच सेब जोड़ो",

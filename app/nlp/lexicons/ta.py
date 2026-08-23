@@ -321,6 +321,10 @@ TAMIL = Lexicon(
     item_aliases=_ITEM_ALIASES,
     stopwords=_STOPWORDS,
     replacement_cues=(r"பதிலாக", r"ஆக", r"க்கு", r"என"),
+    # Tamil joins nouns with the clitic -um. Written separately it is a
+    # token of its own; fused onto the noun it cannot be split, which is
+    # a documented limitation.
+    conjunctions=(r"மற்றும்", r"உம்", r"um", r"and", r","),
     examples=(
         "எனக்கு இரண்டு லிட்டர் பால் வேண்டும்",
         "ஐந்து ஆப்பிள் சேர்",

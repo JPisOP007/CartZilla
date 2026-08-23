@@ -50,6 +50,13 @@ def _patterns(lexicon: Lexicon) -> dict[str, re.Pattern[str]]:
     )
 
     return {
+        # "half a kilo", "quarter of a pound" - a fraction, an article, a unit.
+        # Must be tried before "article_unit", which would otherwise read the
+        # "a kilo" part as a quantity of one and leave "half" in the item name.
+        "fraction_unit": re.compile(
+            rf"{WORD_START}(?P<value>{number})\s+(?:of\s+)?(?:{articles})"
+            rf"\s+(?P<unit>{units}){WORD_END}"
+        ),
         # "2 litres", "two and a half litres", "1.5 kg"
         "number_unit": re.compile(
             rf"{WORD_START}(?P<value>{number})"
@@ -87,6 +94,15 @@ def extract_quantity(text: str, lexicon: Lexicon) -> Quantity:
     unit, then a bare number. Only the first that matches is consumed.
     """
     patterns = _patterns(lexicon)
+
+    match = patterns["fraction_unit"].search(text)
+    if match:
+        value = read_number(match.group("value"), lexicon)
+        # Only a genuine fraction: "2 a kilo" is not something anyone says,
+        # and reading it as a quantity would be worse than ignoring it.
+        if value is not None and 0 < value < 1:
+            unit = lexicon.units.get(match.group("unit"))
+            return Quantity(remove_span(text, match.span()), value, unit)
 
     match = patterns["number_unit"].search(text)
     if match:
