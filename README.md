@@ -68,7 +68,9 @@ Not string matching. All of these reach the same intent:
 
 ### Shopping list
 Add, remove, edit, set quantities and units, tick items off, undo, clear
-completed. Items are **categorised automatically** (milk → Dairy, toothpaste →
+completed. **Removing a quantity decrements** — "remove 7 eggs" when nine are
+listed leaves two, and says so ("Removed 7 eggs (2 left)"). Only a removal
+with no quantity, or one covering everything listed, deletes the entry. Items are **categorised automatically** (milk → Dairy, toothpaste →
 Personal Care) and the list is grouped by aisle. State persists in
 `localStorage`.
 
@@ -466,7 +468,7 @@ automatically.
 pytest
 ```
 
-**440 tests, all passing**, covering the logic that would actually break:
+**441 tests, all passing**, covering the logic that would actually break:
 
 | File | Tests | Covers |
 |---|---|---|
@@ -477,12 +479,27 @@ pytest
 | `test_catalog.py` | 51 | Catalogue integrity (every alternative/complement id resolves), categorisation, compound-name collisions |
 | `test_llm_fallback.py` | 37 | Fallback stays off without a key, never overrides the rules, survives every API failure mode |
 | `test_api.py` | 34 | Every endpoint, validation errors, 404s, static asset serving |
-| `test_docs.py` | 4 | README counts, write-up word limit, and that `.env.example` carries no real value |
+| `test_docs.py` | 5 | README counts, write-up word limit, and that `.env.example` carries no real value |
 | `test_search.py` | 27 | Keyword relevance, brand/price/attribute/category filters, combined filters, no-result fallbacks |
 | `test_recommend.py` | 18 | Frequency, recency decay, seasonality, complements, substitutes, exclusions |
 
 No test makes a network call - the LLM tests stub the transport - so the suite
 runs offline in about a second.
+
+### Frontend tests
+
+`store.js` holds the shopping-list logic and is pure — no DOM — so it is
+tested directly with Node's built-in runner. No dependencies and no build step:
+
+```bash
+node --test tests/js/store.test.mjs
+```
+
+**19 tests.** These exist because two bugs reached production that the Python
+suite could not structurally catch: both times the parser was correct and the
+browser state layer was wrong. They cover quantity-aware removal, the
+add-merge rules, spoken-name matching, and behaviour when `localStorage`
+throws.
 
 Several tests are named regressions for bugs found during development — for
 example `test_query_category_outranks_incidental_word_match` (searching "milk"
@@ -594,7 +611,9 @@ web/
     ui.js                  Rendering
     format.js              Shared display formatting
     app.js                 Orchestration and intent dispatch
-tests/                     440 tests
+tests/
+  test_*.py                Python suite
+  js/store.test.mjs        Frontend state, run with node --test
 ```
 
 ---
@@ -625,8 +644,9 @@ Being straight about what this is and is not:
    accent and background noise.
 9. **No authentication or rate limiting.** Appropriate for a stateless demo
    with no user data; not for production traffic.
-10. **The frontend has no automated tests.** Business logic lives in Python and
-    is well covered; the UI was verified through scripted manual QA.
+10. **Frontend test coverage is partial.** `store.js` is covered by Node tests;
+    the rendering and speech layers are still verified only by scripted manual
+    QA, since they need a DOM and a microphone.
 
 ---
 

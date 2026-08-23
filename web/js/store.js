@@ -202,13 +202,49 @@ export const store = {
     return { item, merged: false };
   },
 
-  remove(name) {
+  /**
+   * Remove an item, or part of one.
+   *
+   * "remove 7 eggs" when nine are listed means take seven off, not throw the
+   * whole entry away. Only a removal with no quantity - or one that covers
+   * everything listed - deletes the item.
+   *
+   * Returns null when nothing matched, otherwise a record of what happened so
+   * the caller can report it accurately.
+   */
+  remove(name, quantity = null) {
     const target = this.find(name);
     if (!target) return null;
+
     this.snapshot();
+    const current = target.quantity ?? 1;
+    const asked = Number(quantity);
+    const partial =
+      Number.isFinite(asked) && asked > 0 && asked < current;
+
+    if (partial) {
+      target.quantity = current - asked;
+      this.save();
+      return {
+        item: target,
+        name: target.name,
+        unit: target.unit,
+        removedAll: false,
+        removed: asked,
+        remaining: target.quantity,
+      };
+    }
+
     this.items = this.items.filter((item) => item.id !== target.id);
     this.save();
-    return target;
+    return {
+      item: target,
+      name: target.name,
+      unit: target.unit,
+      removedAll: true,
+      removed: current,
+      remaining: 0,
+    };
   },
 
   removeById(id) {

@@ -101,9 +101,26 @@ function handleRemove(command) {
   const removed = [];
   const missing = [];
   for (const entry of entries) {
-    const gone = store.remove(entry.item);
-    if (gone) removed.push(gone.name);
-    else missing.push(entry.item);
+    const result = store.remove(entry.item, entry.quantity);
+    if (!result) {
+      missing.push(entry.item);
+      continue;
+    }
+    if (result.removedAll) {
+      removed.push(result.name);
+    } else {
+      // Say how many came off and how many are left, so a decrement is never
+      // mistaken for a delete.
+      const took = formatItemPhrase({
+        name: result.name,
+        quantity: result.removed,
+        unit: result.unit,
+      });
+      const left = result.unit
+        ? `${formatNumber(result.remaining)} ${formatUnit(result.unit, result.remaining)}`
+        : formatNumber(result.remaining);
+      removed.push(`${took} (${left} left)`);
+    }
   }
 
   if (!removed.length) {

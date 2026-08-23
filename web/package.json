@@ -1,0 +1,6 @@
+{
+  "name": "cartzilla-web",
+  "private": true,
+  "type": "module",
+  "description": "Marks web/js as ES modules so Node can import them for tests. There is no build step and no dependencies; the browser loads these files directly."
+}
