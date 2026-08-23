@@ -212,10 +212,22 @@ right. The hard part is that "and" is not always a separator:
 - `between $3 **and** $6` — belongs to the price range
 - `milk **and** eggs` — a genuine list
 
-Two rules keep them apart. Price is extracted *before* splitting, so a range
-has already been consumed. And a split only happens if **every** resulting
-segment names something — "two" alone does not, so that command stays whole.
-A phrase that names a real catalog product is never split either.
+Three rules keep them apart. Price is extracted *before* splitting, so a range
+has already been consumed. A split only happens if **every** resulting segment
+names something — "two" alone does not, so that command stays whole. And a
+phrase that names a real catalog product is never split.
+
+**Two instructions in one breath are not a list.** "Remove milk and add eggs"
+is two different commands, and an earlier version of the split turned it into
+a two-item *removal* whose second item was literally named "add eggs" — which
+then got added to the list. Segments carrying a different intent's verb are now
+separated out and reported in `unhandled`, and the command is held for
+confirmation showing exactly what was left out.
+
+**Quantities have a ceiling.** Nobody buys a thousand litres of milk, and
+speech recognition turns all sorts of things into long digit strings. Anything
+above `MAX_SANE_QUANTITY` is kept and shown — so you can see what was misheard
+— but held for confirmation rather than applied.
 
 **Confidence** is reported on every command. Below `0.45` the UI asks *"Did you
 mean…?"* rather than acting. Destructive commands always confirm, regardless of
@@ -227,7 +239,7 @@ The grammar of a shopping command is small and closed. A dictionary-driven
 parser is:
 
 - **Deterministic** — the same utterance always gives the same result, which
-  is what makes the 347 tests meaningful.
+  is what makes the test suite meaningful.
 - **Free and offline** — no API key, no per-request cost, no rate limit.
 - **Fast** — sub-millisecond, no network hop on the critical path.
 - **Debuggable** — when it gets something wrong you can point at the rule.
@@ -368,6 +380,9 @@ categorisation.
 - **Four languages, not "multilingual".** English, Hindi, Tamil and Spanish
   are implemented and tested. Other locales fall back to the English parser
   rather than erroring — best-effort, not support.
+- **Only one instruction per utterance.** "Remove milk and add eggs" applies
+  the removal and reports the rest as unhandled; it does not do both. Two
+  commands need two utterances.
 - **Compound product names not in the catalogue will split.** "Mac and
   cheese" would become two items, because the guard against splitting only
   recognises phrases the catalogue actually carries. An extra item is the
@@ -451,17 +466,18 @@ automatically.
 pytest
 ```
 
-**423 tests, all passing**, covering the logic that would actually break:
+**440 tests, all passing**, covering the logic that would actually break:
 
 | File | Tests | Covers |
 |---|---|---|
 | `test_parser_en.py` | 90 | Intents, phrasings, quantities, units, prices, brands, attributes, confidence, hostile input |
 | `test_parser_multilingual.py` | 90 | Hindi, Tamil & Spanish intents, numerals, units, price grammar, locale fallback |
 | `test_language_detection.py` | 42 | Script detection, romanized Tamil, and that English is never relabelled |
-| `test_parser_robustness.py` | 34 | Multi-item commands, fractions of a unit, discourse fillers, apostrophe-less contractions |
+| `test_parser_robustness.py` | 47 | Multi-item commands, fractions of a unit, discourse fillers, apostrophe-less contractions |
 | `test_catalog.py` | 51 | Catalogue integrity (every alternative/complement id resolves), categorisation, compound-name collisions |
 | `test_llm_fallback.py` | 37 | Fallback stays off without a key, never overrides the rules, survives every API failure mode |
 | `test_api.py` | 34 | Every endpoint, validation errors, 404s, static asset serving |
+| `test_docs.py` | 4 | README counts, write-up word limit, and that `.env.example` carries no real value |
 | `test_search.py` | 27 | Keyword relevance, brand/price/attribute/category filters, combined filters, no-result fallbacks |
 | `test_recommend.py` | 18 | Frequency, recency decay, seasonality, complements, substitutes, exclusions |
 
@@ -578,7 +594,7 @@ web/
     ui.js                  Rendering
     format.js              Shared display formatting
     app.js                 Orchestration and intent dispatch
-tests/                     423 tests
+tests/                     440 tests
 ```
 
 ---

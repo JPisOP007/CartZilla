@@ -403,7 +403,13 @@ async function runCommand(transcript) {
   // there is no second copy of the number here to drift out of sync.
   if (command.needs_clarification) {
     pendingConfirmation = { command, response };
-    ui.askConfirmation(`Did you mean: ${describeCommand(command)}?`);
+    // Say what was left out. A second instruction in the same breath
+    // ("remove milk and add eggs") is only half-understood, and confirming
+    // without showing the dropped half would hide that.
+    const note = command.unhandled
+      ? ` I didn't catch "${command.unhandled}" — that part won't be applied.`
+      : '';
+    ui.askConfirmation(`Did you mean: ${describeCommand(command)}?${note}`);
     ui.setMicState('idle', "I'm not certain — please confirm.");
     return;
   }

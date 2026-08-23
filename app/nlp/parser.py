@@ -26,6 +26,7 @@ from app.catalog.search import phrase_names_a_product
 from app.models import (
     DESTRUCTIVE_INTENTS,
     LOW_CONFIDENCE,
+    MAX_SANE_QUANTITY,
     Category,
     Intent,
     ParsedCommand,
@@ -228,8 +229,21 @@ def _split_items(text: str, lexicon: Lexicon) -> list[str]:
     return segments
 
 
-def _extract_item_spec(text: str, lexicon: Lexicon) -> ParsedItem | None:
-    """Pull one item, with its own quantity and modifiers, out of a segment."""
+def _extract_item_spec(
+    text: str, lexicon: Lexicon, intent: Intent | None = None
+) -> ParsedItem | None:
+    """Pull one item, with its own quantity and modifiers, out of a segment.
+
+    A segment can carry its own copy of the command verb - "add milk and add
+    eggs" repeats it - so any cue belonging to the same intent is stripped
+    first. Cues for a *different* intent are handled before we get here; see
+    :func:`_partition_segments`.
+    """
+    if intent is not None:
+        detected, spans = _detect_intent(text, lexicon)
+        if detected is intent:
+            text = _remove_spans(text, spans)
+
     quantity = extract_quantity(text, lexicon)
     brand, rest = _extract_brand(quantity.text)
     attributes, rest = _extract_attributes(rest, lexicon)
@@ -249,6 +263,28 @@ def _extract_item_spec(text: str, lexicon: Lexicon) -> ParsedItem | None:
         attributes=attributes,
         category=category if category is not Category.OTHER else None,
     )
+
+
+def _partition_segments(
+    segments: list[str], intent: Intent, lexicon: Lexicon
+) -> tuple[list[str], list[str]]:
+    """Split segments into this command's, and a different instruction's.
+
+    "remove milk and add eggs" is two instructions, not a two-item removal.
+    Without this the second segment keeps its verb and becomes an item
+    literally named "add eggs", which then gets added to the list - acting
+    silently on a misreading, which is the failure this parser exists to
+    avoid. Foreign segments are reported as unhandled instead.
+    """
+    mine: list[str] = []
+    foreign: list[str] = []
+    for segment in segments:
+        detected, _ = _detect_intent(segment, lexicon)
+        if detected is not Intent.UNKNOWN and detected is not intent:
+            foreign.append(segment)
+        else:
+            mine.append(segment)
+    return mine, foreign
 
 
 def _extract_attributes(text: str, lexicon: Lexicon) -> tuple[list[str], str]:
@@ -334,6 +370,22 @@ def _confidence(command: ParsedCommand) -> float:
     return round(max(0.0, min(0.99, score)), 2)
 
 
+def _has_implausible_quantity(command: ParsedCommand) -> bool:
+    """True when a quantity is too large to be a real shopping request.
+
+    "add 999999999 apples" parses perfectly well; it is just never what anyone
+    meant. Speech recognition turns all sorts of things into long digit
+    strings, so the number is kept and shown, but the command is held for
+    confirmation rather than applied.
+    """
+    quantities = [entry.quantity for entry in command.items]
+    quantities.append(command.quantity)
+    return any(
+        quantity is not None and quantity > MAX_SANE_QUANTITY
+        for quantity in quantities
+    )
+
+
 def _needs_clarification(command: ParsedCommand) -> bool:
     """Whether the UI should ask "did you mean...?" before acting.
 
@@ -342,6 +394,8 @@ def _needs_clarification(command: ParsedCommand) -> bool:
     """
     if command.intent is Intent.UNKNOWN or command.requires_confirmation:
         return False
+    if command.unhandled or _has_implausible_quantity(command):
+        return True
     return command.confidence < LOW_CONFIDENCE
 
 
@@ -478,19 +532,26 @@ def _parse(transcript: str, language: str = "en-US") -> ParsedCommand:
     if intent in _MULTI_ITEM_INTENTS:
         specs: list[ParsedItem] = []
 
+        segments = _split_items(remainder, lexicon)
+        mine, foreign = _partition_segments(segments, intent, lexicon)
+        if foreign:
+            command.unhandled = " ".join(foreign)
+
         # Split only when every segment names something. "two and a half kg of
         # potatoes" contains an "and" that belongs to the quantity, not to a
         # list, and splitting there would silently drop the "two".
-        segments = _split_items(remainder, lexicon)
-        if len(segments) > 1:
+        if len(mine) > 1:
             candidates = [
-                _extract_item_spec(segment, lexicon) for segment in segments
+                _extract_item_spec(segment, lexicon, intent) for segment in mine
             ]
             if all(candidate is not None for candidate in candidates):
                 specs = [c for c in candidates if c is not None]
 
         if not specs:
-            single = _extract_item_spec(remainder, lexicon)
+            # One clause only. When a second instruction was stripped out, parse
+            # what is left rather than the original text.
+            source = " ".join(mine) if foreign else remainder
+            single = _extract_item_spec(source, lexicon, intent)
             specs = [single] if single is not None else []
 
         if specs:

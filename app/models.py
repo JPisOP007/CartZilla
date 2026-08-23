@@ -31,6 +31,12 @@ class Intent(str, Enum):
 #: Intents that must not run without an explicit confirmation step.
 DESTRUCTIVE_INTENTS: frozenset[Intent] = frozenset({Intent.CLEAR_LIST})
 
+#: Largest quantity treated as credible. Nobody buys a thousand litres of
+#: milk, so anything above this is far more likely to be a misheard number
+#: than a real request. It is not rejected - the user still sees what was
+#: heard - but the command is held for confirmation instead of being applied.
+MAX_SANE_QUANTITY = 1000
+
 #: Interpretations below this confidence are surfaced to the user as a
 #: question rather than executed silently. The server applies this itself and
 #: reports ``needs_clarification``, so the threshold has one definition rather
@@ -65,7 +71,7 @@ class ParsedItem(BaseModel):
     item: str
     #: ``item`` mapped onto the catalog's English vocabulary.
     canonical_item: str | None = None
-    quantity: float | None = None
+    quantity: float | None = Field(default=None, ge=0)
     unit: str | None = None
     brand: str | None = None
     attributes: list[str] = Field(default_factory=list)
@@ -102,7 +108,7 @@ class ParsedCommand(BaseModel):
     #: for English. Search and categorization use this; the UI displays
     #: ``item``, so a Hindi speaker still sees their own words on the list.
     canonical_item: str | None = None
-    quantity: float | None = None
+    quantity: float | None = Field(default=None, ge=0)
     unit: str | None = None
     brand: str | None = None
     category: Category | None = None
@@ -127,6 +133,11 @@ class ParsedCommand(BaseModel):
     #: Derived from :data:`LOW_CONFIDENCE` so the UI needs no threshold of
     #: its own.
     needs_clarification: bool = False
+    #: Part of the utterance the parser could not fold into this command - a
+    #: second, different instruction ("remove milk and add eggs"), or an
+    #: implausible quantity. Reported rather than discarded, so the UI can say
+    #: what was left out instead of silently acting on half the sentence.
+    unhandled: str | None = None
 
     def summary(self) -> str:
         """Human-readable echo of the interpretation for the feedback line."""

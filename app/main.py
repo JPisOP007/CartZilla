@@ -17,7 +17,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from app import __version__
@@ -73,9 +73,29 @@ def healthz() -> dict[str, str]:
     return {"status": "ok"}
 
 
+class RevalidatedStaticFiles(StaticFiles):
+    """Static assets that are always revalidated before use.
+
+    With only ETag and Last-Modified and no explicit Cache-Control, browsers
+    fall back to *heuristic* caching and may keep an ES module for hours. That
+    produces the worst kind of deployment bug: a stale frontend talking to a
+    freshly deployed backend, where the API returns two items and the page
+    only knows how to add one.
+
+    "no-cache" does not mean "do not store" - the browser still caches, it just
+    revalidates first, so the usual response is an empty 304. These assets are
+    a few kilobytes, so correctness is worth far more than the saved request.
+    """
+
+    def file_response(self, *args: object, **kwargs: object) -> Response:
+        response = super().file_response(*args, **kwargs)  # type: ignore[arg-type]
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 if WEB_DIR.is_dir():
     # html=True serves index.html at "/" and gives a sensible 404 page.
-    app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")
+    app.mount("/", RevalidatedStaticFiles(directory=WEB_DIR, html=True), name="web")
 else:  # pragma: no cover - only hit if the build is packaged incorrectly.
     logger.warning("web directory not found at %s; serving API only", WEB_DIR)
 

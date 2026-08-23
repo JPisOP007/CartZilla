@@ -223,3 +223,80 @@ def test_ambiguous_words_are_not_treated_as_contractions(
     from app.nlp.normalize import normalize
 
     assert normalize(text) == expected
+
+
+# --------------------------------------------------------------------------
+# 5. Mixed-intent utterances
+# --------------------------------------------------------------------------
+
+
+def test_two_different_instructions_are_not_one_command() -> None:
+    """Regression introduced by the multi-item split itself.
+
+    "remove milk and add eggs" was parsed as a two-item REMOVE, the second
+    item being one literally named "add eggs" - which then got added to the
+    list as a Dairy product, at a confidence high enough to act without
+    asking. Acting silently on a misreading is precisely what this parser is
+    built to avoid.
+    """
+    command = parse("remove milk and add eggs")
+
+    assert command.intent is Intent.REMOVE_ITEM
+    assert [entry.item for entry in command.items] == ["milk"]
+    assert not any("add" in entry.item for entry in command.items)
+    # The dropped clause is reported, not discarded in silence...
+    assert command.unhandled == "add eggs"
+    # ...and the command is held for confirmation rather than applied.
+    assert command.needs_clarification is True
+
+
+def test_the_other_ordering_too() -> None:
+    command = parse("add milk and remove eggs")
+    assert command.unhandled is not None
+    assert command.needs_clarification is True
+    assert not any("remove" in entry.item for entry in command.items)
+
+
+def test_a_repeated_verb_is_still_one_instruction() -> None:
+    """"add milk and add eggs" is a list, not a mixed intent."""
+    command = parse("add milk and add eggs")
+    assert command.intent is Intent.ADD_ITEM
+    assert [entry.item for entry in command.items] == ["milk", "eggs"]
+    assert command.unhandled is None
+    assert command.needs_clarification is False
+
+
+def test_ordinary_multi_item_commands_report_nothing_unhandled() -> None:
+    for utterance in ["add milk and eggs", "add 2 litres of milk and 3 eggs"]:
+        assert parse(utterance).unhandled is None
+
+
+# --------------------------------------------------------------------------
+# 6. Quantity sanity bound
+# --------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("quantity", [1001, 5000, 999999999])
+def test_implausible_quantities_are_held_for_confirmation(quantity: int) -> None:
+    """Speech recognition turns all sorts of things into long digit strings.
+
+    The number is kept and shown, so the user can see what was misheard, but
+    the command is not applied without asking.
+    """
+    command = parse(f"add {quantity} apples")
+    assert command.intent is Intent.ADD_ITEM
+    assert command.quantity == quantity
+    assert command.needs_clarification is True
+
+
+@pytest.mark.parametrize("quantity", [1, 2, 12, 50, 1000])
+def test_ordinary_quantities_act_without_asking(quantity: int) -> None:
+    command = parse(f"add {quantity} apples")
+    assert command.quantity == quantity
+    assert command.needs_clarification is False
+
+
+def test_the_bound_applies_to_each_item_in_a_list() -> None:
+    command = parse("add 2 apples and 999999999 bananas")
+    assert len(command.items) == 2
+    assert command.needs_clarification is True
